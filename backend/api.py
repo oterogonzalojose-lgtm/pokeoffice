@@ -11,6 +11,7 @@ load_dotenv()
 
 from db.models import init_db, save_conversation, get_history
 from agents.vp import run_vp
+from mcp.sheets_client import load_config, get_spreadsheet_url, crear_planilla_maestra
 
 
 class ConnectionManager:
@@ -103,3 +104,36 @@ async def agents_info():
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+# ── Planilla Maestra ───────────────────────────────────────────────────────────
+
+@app.get("/planilla")
+async def planilla_info():
+    cfg = load_config()
+    sid = cfg.get("spreadsheet_id")
+    if not sid:
+        return {"configured": False, "message": "Planilla no configurada. Ejecutá scripts/crear_planilla.py"}
+    return {
+        "configured": True,
+        "spreadsheet_id": sid,
+        "url": f"https://docs.google.com/spreadsheets/d/{sid}",
+        "business_name": cfg.get("business_name", ""),
+    }
+
+
+class SetupRequest(BaseModel):
+    nombre_negocio: str
+
+
+@app.post("/planilla/setup")
+async def setup_planilla(req: SetupRequest):
+    try:
+        sid = crear_planilla_maestra(req.nombre_negocio)
+        return {
+            "ok": True,
+            "spreadsheet_id": sid,
+            "url": f"https://docs.google.com/spreadsheets/d/{sid}",
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
