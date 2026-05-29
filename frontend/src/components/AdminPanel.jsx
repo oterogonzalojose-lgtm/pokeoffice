@@ -43,8 +43,8 @@ function TenantDetail({ tid, token, onBack }) {
   const load = useCallback(async () => {
     setLoading(true)
     const [det, mem] = await Promise.all([
-      fetch(`${API}/admin/tenants/${tid}`, { headers }).then(r => r.json()),
-      fetch(`${API}/admin/tenants/${tid}/memoria`, { headers }).then(r => r.json()),
+      fetch(`${API}/api/admin/tenants/${tid}`, { headers }).then(r => r.json()),
+      fetch(`${API}/api/admin/tenants/${tid}/memoria`, { headers }).then(r => r.json()),
     ])
     setData(det)
     setMemoria(mem)
@@ -56,7 +56,7 @@ function TenantDetail({ tid, token, onBack }) {
   async function handleInvite(e) {
     e.preventDefault()
     setInviteMsg('')
-    const res = await fetch(`${API}/admin/tenants/${tid}/invite`, {
+    const res = await fetch(`${API}/api/admin/tenants/${tid}/invite`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: inviteEmail }),
@@ -238,13 +238,13 @@ export default function AdminPanel({ token, onLogout }) {
 
   const loadTenants = useCallback(async () => {
     setLoading(true)
-    const data = await fetch(`${API}/admin/tenants`, { headers }).then(r => r.json())
+    const data = await fetch(`${API}/api/admin/tenants`, { headers }).then(r => r.json())
     setTenants(Array.isArray(data) ? data : [])
     setLoading(false)
   }, [])
 
   const loadFeedback = useCallback(async () => {
-    const data = await fetch(`${API}/admin/feedback`, { headers }).then(r => r.json())
+    const data = await fetch(`${API}/api/admin/feedback`, { headers }).then(r => r.json())
     setFeedback(Array.isArray(data) ? data : [])
   }, [])
 
@@ -254,7 +254,7 @@ export default function AdminPanel({ token, onLogout }) {
   async function handleCreateTenant(e) {
     e.preventDefault()
     setFormMsg('')
-    const res = await fetch(`${API}/admin/tenants`, {
+    const res = await fetch(`${API}/api/admin/tenants`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify(form),
@@ -268,7 +268,7 @@ export default function AdminPanel({ token, onLogout }) {
   }
 
   async function markRead(fid) {
-    await fetch(`${API}/admin/feedback/${fid}/leer`, { method: 'PATCH', headers })
+    await fetch(`${API}/api/admin/feedback/${fid}/leer`, { method: 'PATCH', headers })
     loadFeedback()
   }
 

@@ -18,7 +18,7 @@ from db.admin_models import (
     listar_feedback, marcar_feedback_leido,
 )
 
-router   = APIRouter(prefix="/admin", tags=["admin"])
+router   = APIRouter(prefix="/api/admin", tags=["admin"])
 _bearer  = HTTPBearer()
 
 ADMIN_SECRET   = os.getenv("ADMIN_SECRET", "cambiar-en-produccion")
