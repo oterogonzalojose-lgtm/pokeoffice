@@ -227,3 +227,34 @@ async def marcar_feedback_leido(fid: int):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("UPDATE feedback SET leido = 1 WHERE id = ?", (fid,))
         await db.commit()
+
+
+# ── Solicitudes de registro ───────────────────────────────────────────────────
+
+async def crear_solicitud(email: str, nombre: str = "", mensaje: str = "") -> dict:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "INSERT INTO solicitudes_registro (email, nombre, mensaje) VALUES (?,?,?)",
+            (email.lower().strip(), nombre.strip(), mensaje.strip()),
+        )
+        await db.commit()
+        return {"id": cursor.lastrowid, "email": email, "nombre": nombre}
+
+
+async def listar_solicitudes(solo_pendientes: bool = True) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        where = "WHERE atendida = 0" if solo_pendientes else ""
+        cursor = await db.execute(
+            f"SELECT * FROM solicitudes_registro {where} ORDER BY created_at DESC"
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+
+async def atender_solicitud(sid: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE solicitudes_registro SET atendida = 1 WHERE id = ?", (sid,)
+        )
+        await db.commit()

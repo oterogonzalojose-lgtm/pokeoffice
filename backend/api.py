@@ -7,11 +7,12 @@ from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
+import jwt as _jwt
 
 load_dotenv()
 
@@ -26,6 +27,7 @@ from db.models import (
 from db.admin_models import init_feedback_table
 from agents.vp import run_vp
 from routers.admin import router as admin_router
+from routers.auth  import router as auth_router, JWT_SECRET, JWT_ALGORITHM
 from mcp.sheets_client import (
     load_config, crear_planilla_maestra, actualizar_formulas_planilla,
     listar_stock, get_dashboard_data,
@@ -122,6 +124,45 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Pokeoffice API", lifespan=lifespan)
 app.include_router(admin_router)
+app.include_router(auth_router)
+
+# ── Rutas y prefijos que no requieren auth de usuario ─────────────────────────
+_PUBLIC_EXACT    = {"/health", "/ws", "/auth/solicitar", "/auth/verificar"}
+_PUBLIC_PREFIXES = ("/api/admin", "/assets", "/sprites", "/auth/")
+
+
+@app.middleware("http")
+async def user_auth_middleware(request: Request, call_next):
+    path   = request.url.path
+    method = request.method
+
+    # Rutas públicas exactas o por prefijo
+    if path in _PUBLIC_EXACT or any(path.startswith(p) for p in _PUBLIC_PREFIXES):
+        return await call_next(request)
+
+    # Navegación del browser (Accept: text/html) → sirve el SPA sin auth
+    if "text/html" in request.headers.get("accept", ""):
+        return await call_next(request)
+
+    # Upgrade de WebSocket → pasa directo (el handler valida el token)
+    if request.headers.get("upgrade", "").lower() == "websocket":
+        return await call_next(request)
+
+    # Verificar JWT de usuario
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return JSONResponse({"detail": "No autenticado"}, status_code=401)
+
+    try:
+        payload = _jwt.decode(auth[7:], JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get("role") != "user":
+            raise ValueError("Not a user token")
+        request.state.user = payload
+    except Exception:
+        return JSONResponse({"detail": "Token inválido o expirado"}, status_code=401)
+
+    return await call_next(request)
+
 
 app.add_middleware(
     CORSMiddleware,

@@ -248,8 +248,15 @@ export default function AdminPanel({ token, onLogout }) {
     setFeedback(Array.isArray(data) ? data : [])
   }, [])
 
+  const [solicitudes, setSolicitudes] = useState([])
+  const loadSolicitudes = useCallback(async () => {
+    const data = await fetch(`${API}/api/admin/solicitudes`, { headers }).then(r => r.json())
+    setSolicitudes(Array.isArray(data) ? data : [])
+  }, [])
+
   useEffect(() => { loadTenants() }, [loadTenants])
-  useEffect(() => { if (tab === 'feedback') loadFeedback() }, [tab, loadFeedback])
+  useEffect(() => { if (tab === 'feedback')    loadFeedback() },    [tab, loadFeedback])
+  useEffect(() => { if (tab === 'solicitudes') loadSolicitudes() }, [tab, loadSolicitudes])
 
   async function handleCreateTenant(e) {
     e.preventDefault()
@@ -294,7 +301,7 @@ export default function AdminPanel({ token, onLogout }) {
 
       {/* Tabs */}
       <div className="border-b border-[#1e1e3a] px-6 flex gap-1 pt-2">
-        {[['tenants','🏠 Tenants'], ['feedback','💬 Feedback']].map(([k, l]) => (
+        {[['tenants','🏠 Tenants'], ['solicitudes','📬 Solicitudes'], ['feedback','💬 Feedback']].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`font-mono text-xs px-3 py-1.5 rounded-t transition-colors ${tab === k ? 'bg-[#1e1e3a] text-white' : 'text-gray-500 hover:text-gray-300'}`}>
             {l}
@@ -355,6 +362,46 @@ export default function AdminPanel({ token, onLogout }) {
                     </table>
                   </div>
                 )
+            }
+          </div>
+        )}
+
+        {/* Solicitudes tab */}
+        {tab === 'solicitudes' && (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <h2 className="font-mono text-sm font-bold text-white uppercase tracking-widest">
+                Solicitudes de acceso
+              </h2>
+              <button onClick={loadSolicitudes}
+                className="text-[10px] font-mono text-blue-400 hover:text-blue-300 transition-colors">
+                ↻ Actualizar
+              </button>
+            </div>
+            {solicitudes.length === 0
+              ? <p className="font-mono text-sm text-gray-600">Sin solicitudes pendientes.</p>
+              : solicitudes.map(s => (
+                <div key={s.id}
+                  className="bg-[#07070f] border border-[#2a2a5a] rounded p-3 flex items-start gap-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="font-mono text-sm text-white font-bold">{s.nombre || '(sin nombre)'}</span>
+                      <span className="font-mono text-xs text-gray-500">{s.email}</span>
+                    </div>
+                    {s.mensaje && <p className="font-mono text-xs text-gray-400">{s.mensaje}</p>}
+                    <p className="font-mono text-[10px] text-gray-600 mt-1">{s.created_at?.slice(0,16)}</p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      await fetch(`${API}/api/admin/solicitudes/${s.id}/atender`, { method: 'PATCH', headers })
+                      loadSolicitudes()
+                    }}
+                    className="text-[10px] font-mono text-green-400 hover:text-green-300 border border-green-900
+                               px-2 py-1 rounded transition-colors shrink-0">
+                    ✓ Atendida
+                  </button>
+                </div>
+              ))
             }
           </div>
         )}

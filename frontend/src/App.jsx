@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import AdminLogin from './components/AdminLogin'
 import AdminPanel from './components/AdminPanel'
+import LoginScreen from './components/LoginScreen'
 import OfficeCanvas from './components/OfficeCanvas'
+import { apiFetch, getToken, clearToken } from './utils/api'
 import ChatInput from './components/ChatInput'
 import ActivityFeed from './components/ActivityFeed'
 import PostItBoard from './components/PostItBoard'
@@ -60,9 +62,9 @@ function SidebarPanel({ feedEvents }) {
 // ── Admin route ───────────────────────────────────────────────────────────────
 
 function AdminRoute() {
-  const [token, setToken] = useState(() => localStorage.getItem('admin_token'))
-  function handleLogout() { localStorage.removeItem('admin_token'); setToken(null) }
-  if (!token) return <AdminLogin onLogin={setToken} />
+  const [token, setAdminToken] = useState(() => localStorage.getItem('admin_token'))
+  function handleLogout() { localStorage.removeItem('admin_token'); setAdminToken(null) }
+  if (!token) return <AdminLogin onLogin={setAdminToken} />
   return <AdminPanel token={token} onLogout={handleLogout} />
 }
 
@@ -70,6 +72,9 @@ function AdminRoute() {
 
 export default function App() {
   if (window.location.pathname === '/admin') return <AdminRoute />
+
+  const [userToken, setUserToken] = useState(() => getToken())
+  if (!userToken) return <LoginScreen onLogin={() => setUserToken(getToken())} />
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [negocioConfig, setNegocioConfig]   = useState(null)
   const [agents, setAgents]           = useState([])
@@ -81,7 +86,7 @@ export default function App() {
   const [planillaUrl,  setPlanillaUrl]  = useState(null)
 
   useEffect(() => {
-    fetch(`${API}/config`)
+    apiFetch('/config')
       .then(r => r.json())
       .then(cfg => {
         setNegocioConfig(cfg)
@@ -89,13 +94,12 @@ export default function App() {
       })
       .catch(() => setShowOnboarding(true))
 
-    // Cargar URL de la planilla maestra si ya está configurada
-    fetch(`${API}/planilla`)
+    apiFetch('/planilla')
       .then(r => r.json())
       .then(p => { if (p.configured && p.url) setPlanillaUrl(p.url) })
       .catch(() => {})
 
-    fetch(`${API}/agents`)
+    apiFetch('/agents')
       .then(r => r.json())
       .then(data => {
         setAgents(data)
@@ -122,9 +126,8 @@ export default function App() {
     setLastUserMessage(message)
     setFeedEvents(prev => [...prev, { type: 'user', message }])
     try {
-      await fetch(`${API}/message`, {
+      await apiFetch('/message', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message }),
       })
     } catch {

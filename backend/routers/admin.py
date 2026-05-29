@@ -16,6 +16,7 @@ from db.admin_models import (
     listar_users_tenant, crear_invitacion, listar_invitaciones_tenant,
     get_vp_memoria_tenant, get_metricas_tenant,
     listar_feedback, marcar_feedback_leido,
+    listar_solicitudes, atender_solicitud,
 )
 
 router   = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -124,4 +125,17 @@ async def get_feedback(solo_no_leido: bool = False):
 @router.patch("/feedback/{fid}/leer", dependencies=[Depends(_require_admin)])
 async def patch_feedback_leido(fid: int):
     await marcar_feedback_leido(fid)
+    return {"ok": True}
+
+
+# ── Solicitudes de registro ───────────────────────────────────────────────────
+
+@router.get("/solicitudes", dependencies=[Depends(_require_admin)])
+async def get_solicitudes(solo_pendientes: bool = True):
+    return await listar_solicitudes(solo_pendientes)
+
+
+@router.patch("/solicitudes/{sid}/atender", dependencies=[Depends(_require_admin)])
+async def patch_atender_solicitud(sid: int):
+    await atender_solicitud(sid)
     return {"ok": True}

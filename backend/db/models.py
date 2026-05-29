@@ -95,6 +95,16 @@ async def init_db():
                 last_used TEXT
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS solicitudes_registro (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL,
+                nombre TEXT DEFAULT '',
+                mensaje TEXT DEFAULT '',
+                atendida INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
         await db.commit()
 
 

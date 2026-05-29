@@ -277,7 +277,7 @@ function AddPostItForm({ onAdd, onClose }) {
 }
 
 // ── Tablero principal ─────────────────────────────────────────────────────────
-const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+import { apiFetch } from '../utils/api'
 
 export default function PostItBoard({ newReminder }) {
   const [postIts,    setPostIts]    = useState([])
@@ -286,7 +286,7 @@ export default function PostItBoard({ newReminder }) {
 
   // Cargar desde backend
   useEffect(() => {
-    fetch(`${API}/recordatorios`)
+    apiFetch('/recordatorios')
       .then(r => r.json())
       .then(data => setPostIts(data))
       .catch(() => {})
@@ -305,9 +305,8 @@ export default function PostItBoard({ newReminder }) {
     const fecha = new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })
     const nuevo = { texto, tipo, fecha, completado: false }
     try {
-      const res  = await fetch(`${API}/recordatorios`, {
+      const res  = await apiFetch('/recordatorios', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(nuevo),
       })
       const saved = await res.json()
@@ -320,7 +319,7 @@ export default function PostItBoard({ newReminder }) {
 
   async function handleDelete(id) {
     setPostIts(prev => prev.filter(p => p.id !== id))
-    try { await fetch(`${API}/recordatorios/${id}`, { method: 'DELETE' }) } catch {}
+    try { await apiFetch(`/recordatorios/${id}`, { method: 'DELETE' }) } catch {}
   }
 
   async function handleToggle(id) {
@@ -328,7 +327,7 @@ export default function PostItBoard({ newReminder }) {
       p.id === id ? { ...p, completado: !p.completado } : p
     ))
     try {
-      await fetch(`${API}/recordatorios/${id}/toggle`, { method: 'PATCH' })
+      await apiFetch(`/recordatorios/${id}/toggle`, { method: 'PATCH' })
     } catch {}
   }
 

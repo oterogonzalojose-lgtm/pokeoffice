@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
-
-const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+import { apiFetch } from '../utils/api'
 
 function KPI({ label, value, sub, color = '#4A90D9', icon }) {
   return (
@@ -175,7 +174,7 @@ export default function Dashboard() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API}/dashboard`)
+      const res = await apiFetch('/dashboard')
       const json = await res.json()
       if (json.error) throw new Error(json.error)
       setData(json)

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-const API = import.meta.env.VITE_API_URL ?? ''
+import { apiFetch } from '../utils/api'
 
 const TIPOS_NEGOCIO = [
   'Consultorio / Salud', 'Tienda / Retail', 'Estudio profesional',
@@ -216,17 +216,15 @@ export default function Onboarding({ onComplete }) {
     setPhase('creating')
 
     try {
-      await fetch(`${API}/config/onboarding`, {
+      await apiFetch('/config/onboarding', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
     } catch { /* continuar aunque falle */ }
 
     try {
-      const res  = await fetch(`${API}/planilla/setup`, {
+      const res  = await apiFetch('/planilla/setup', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nombre_negocio: data.nombre_negocio }),
       })
       const json = await res.json()

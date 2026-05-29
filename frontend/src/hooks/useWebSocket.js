@@ -1,9 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react'
-
-// En producción: deriva la URL del host actual (mismo origen, Railway)
-// En desarrollo: usa .env.development → VITE_WS_URL=ws://localhost:8000/ws
-const WS_URL = import.meta.env.VITE_WS_URL
-  ?? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`
+import { getWsUrl } from '../utils/api'
 
 export function useWebSocket(onEvent) {
   const ws = useRef(null)
@@ -16,7 +12,7 @@ export function useWebSocket(onEvent) {
 
     function connect() {
       if (unmounted) return
-      ws.current = new WebSocket(WS_URL)
+      ws.current = new WebSocket(getWsUrl())
 
       ws.current.onmessage = (e) => {
         try {

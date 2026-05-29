@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
-
-const API = import.meta.env.VITE_API_URL ?? ''
+import { apiFetch } from '../utils/api'
 
 function formatDate(str) {
   if (!str) return ''
@@ -50,7 +49,7 @@ export default function ConversationHistory() {
   const [error, setError]       = useState(null)
 
   useEffect(() => {
-    fetch(`${API}/history?limit=50`)
+    apiFetch('/history?limit=50')
       .then(r => r.json())
       .then(data => { setHistory(data); setLoading(false) })
       .catch(() => { setError('No se pudo cargar el historial'); setLoading(false) })
