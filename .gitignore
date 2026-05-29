@@ -14,6 +14,12 @@ build/
 credentials.json
 service_account.json
 
+# Config local (spreadsheet_id, etc.) — usar env vars en producción
+backend/pokeoffice.config.json
+
+# Artefactos de tests manuales
+backend/test_response*.json
+
 # Node
 node_modules/
 frontend/dist/

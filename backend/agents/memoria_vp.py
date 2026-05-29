@@ -1,0 +1,141 @@
+"""
+Memoria privada del VP.
+
+Después de cada conversación, extrae aprendizajes sobre las preferencias del jefe
+y los almacena de forma privada. Estos aprendizajes se inyectan en el contexto del
+VP en conversaciones futuras para que sea más autosuficiente y no repita preguntas.
+
+EL USUARIO NUNCA VE ESTE CONTENIDO — es uso interno exclusivo del VP.
+"""
+import json
+import logging
+import os
+
+from anthropic import Anthropic
+from db.models import guardar_aprendizaje, obtener_memoria
+
+log = logging.getLogger("pokeoffice.memoria")
+
+_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+_EXTRACTION_PROMPT = """Analizás el intercambio entre el jefe y el equipo.
+Tu tarea: extraer aprendizajes CONCRETOS y ACCIONABLES sobre cómo le gusta trabajar al jefe.
+
+Tipos de aprendizajes:
+- preferencia: cómo quiere que se hagan las cosas ("prefiere respuestas cortas")
+- patron: algo recurrente ("los lunes pide el balance")
+- excepcion: cuándo NO pedir confirmación ("si dice 'anotalo directo' ejecutar sin preguntar")
+- cliente: info relevante sobre un cliente frecuente
+- estilo: tono, formalidad, forma de comunicarse
+
+Reglas ESTRICTAS:
+1. Solo extraé si es genuinamente útil para conversaciones FUTURAS
+2. Máximo 2 aprendizajes por conversación
+3. Si no hay nada nuevo y útil: devolvé []
+4. Cada aprendizaje: máximo 25 palabras, específico, accionable
+5. NO repitas aprendizajes obvios o genéricos
+
+Formato de respuesta (JSON puro, sin markdown):
+[{"tipo": "preferencia|patron|excepcion|cliente|estilo", "aprendizaje": "...", "relevancia": 1-10}]
+"""
+
+
+async def extraer_aprendizajes(user_message: str, vp_response: str,
+                                memoria_actual: list[dict]) -> list[dict]:
+    """
+    Analiza una conversación y extrae nuevos aprendizajes.
+    Corre en background — no bloquea la respuesta al usuario.
+    """
+    ya_sabe = "\n".join(f"- {m['aprendizaje']}" for m in memoria_actual[:20])
+
+    prompt = (
+        f"INTERCAMBIO:\n"
+        f"Jefe: {user_message}\n"
+        f"VP respondió: {vp_response[:300]}\n\n"
+        f"APRENDIZAJES QUE YA TENÉS (no repetir):\n{ya_sabe or 'Ninguno aún.'}"
+    )
+
+    try:
+        resp = _client.messages.create(
+            model="claude-haiku-4-5-20251001",   # modelo rápido y barato para esta tarea
+            max_tokens=256,
+            system=_EXTRACTION_PROMPT,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = resp.content[0].text.strip()
+        aprendizajes = json.loads(raw)
+        if not isinstance(aprendizajes, list):
+            return []
+        return aprendizajes
+    except Exception as e:
+        log.debug("extraer_aprendizajes: %s", e)
+        return []
+
+
+async def procesar_post_conversacion(user_message: str, vp_response: str):
+    """
+    Punto de entrada: extrae y guarda aprendizajes tras cada conversación.
+    Se llama en background — no bloquea nada.
+    """
+    try:
+        memoria_actual = await obtener_memoria(limit=30)
+        nuevos = await extraer_aprendizajes(user_message, vp_response, memoria_actual)
+        for item in nuevos:
+            if isinstance(item, dict) and item.get("aprendizaje"):
+                await guardar_aprendizaje(
+                    tipo=item.get("tipo", "preferencia"),
+                    aprendizaje=item["aprendizaje"],
+                    contexto=user_message[:100],
+                    relevancia=min(10, max(1, int(item.get("relevancia", 5)))),
+                )
+                log.info("Nuevo aprendizaje [%s]: %s", item.get("tipo"), item["aprendizaje"])
+    except Exception as e:
+        log.error("procesar_post_conversacion: %s", e)
+
+
+def construir_contexto_memoria(memoria: list[dict], config: dict) -> str:
+    """
+    Construye el bloque de contexto privado que se inyecta al inicio
+    del system prompt del VP en cada conversación.
+    """
+    partes = []
+
+    # Info del negocio
+    nombre_negocio = config.get("nombre_negocio", "")
+    nombre_jefe    = config.get("nombre_jefe", "")
+    tipo_negocio   = config.get("tipo_negocio", "")
+    moneda         = config.get("moneda", "ARS")
+
+    if nombre_negocio or nombre_jefe:
+        partes.append("CONTEXTO DEL NEGOCIO:")
+        if nombre_negocio: partes.append(f"  Negocio: {nombre_negocio}")
+        if tipo_negocio:   partes.append(f"  Tipo: {tipo_negocio}")
+        if nombre_jefe:    partes.append(f"  El jefe se llama: {nombre_jefe}")
+        partes.append(f"  Moneda: {moneda}")
+
+    # Memoria del VP
+    if memoria:
+        partes.append("\nLO QUE YA SABÉS DEL JEFE (usalo para no hacer preguntas innecesarias):")
+        por_tipo = {}
+        for m in memoria:
+            t = m.get("tipo", "preferencia")
+            por_tipo.setdefault(t, []).append(m["aprendizaje"])
+
+        etiquetas = {
+            "preferencia": "Preferencias",
+            "patron":      "Patrones recurrentes",
+            "excepcion":   "Cuando NO preguntar",
+            "cliente":     "Clientes clave",
+            "estilo":      "Estilo de comunicacion",
+        }
+        for tipo, items in por_tipo.items():
+            partes.append(f"  {etiquetas.get(tipo, tipo.title())}:")
+            for item in items[:5]:
+                partes.append(f"    • {item}")
+
+        partes.append(
+            "\nAPLICÁ ESTE CONOCIMIENTO: antes de hacer una pregunta al jefe, "
+            "revisá si ya sabés la respuesta por los aprendizajes anteriores."
+        )
+
+    return "\n".join(partes) if partes else ""

@@ -29,28 +29,28 @@ def main():
     parser.add_argument("--nombre", required=True, help='Nombre del negocio (ej: "Ferretería López")')
     args = parser.parse_args()
 
-    print(f"\n🏢  Creando Planilla Maestra para: {args.nombre}")
+    print(f"\n[*] Creando Planilla Maestra para: {args.nombre}")
     print("    Conectando con Google Sheets...\n")
 
     try:
         sid = crear_planilla_maestra(args.nombre)
         url = f"https://docs.google.com/spreadsheets/d/{sid}"
 
-        print("✅  Planilla creada exitosamente!\n")
-        print(f"    📊  URL: {url}")
-        print(f"    🔑  ID:  {sid}\n")
+        print("[OK] Planilla creada exitosamente!\n")
+        print(f"    URL: {url}")
+        print(f"    ID:  {sid}\n")
         print("    Hojas creadas:")
-        print("      • Clientes       — CRM básico")
-        print("      • Libro Contable — Activos / Pasivos / Movimientos")
-        print("      • Cashflow       — Posiciones bancarias / Flujo de caja\n")
+        print("      - Clientes       -- CRM basico")
+        print("      - Libro Contable -- Activos / Pasivos / Movimientos")
+        print("      - Cashflow       -- Posiciones bancarias / Flujo de caja\n")
         print("    El ID fue guardado en pokeoffice.config.json.")
         print("    Los agentes ya pueden usar la planilla.\n")
-        print("    ⚠️   Importante: compartí la planilla con tu cuenta de Google")
-        print("         para poder editarla manualmente también.")
-        print(f"         Andá a: {url}\n")
+        print("    IMPORTANTE: compartí la planilla con tu cuenta de Google")
+        print("    para poder editarla manualmente también.")
+        print(f"    Andá a: {url}\n")
 
     except FileNotFoundError:
-        print("❌  No se encontró el archivo credentials.json")
+        print("[ERROR] No se encontró el archivo credentials.json")
         print("    Seguí estos pasos:")
         print("    1. Entrá a https://console.cloud.google.com")
         print("    2. Creá un proyecto → APIs → habilitá Google Sheets API y Google Drive API")
@@ -60,7 +60,7 @@ def main():
         print("    6. Actualizá GOOGLE_DRIVE_CREDENTIALS_PATH en .env\n")
         sys.exit(1)
     except Exception as e:
-        print(f"❌  Error: {e}\n")
+        print(f"[ERROR] {e}\n")
         sys.exit(1)
 
 

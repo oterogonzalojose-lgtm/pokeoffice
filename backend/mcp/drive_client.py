@@ -23,13 +23,21 @@ def _get_service():
     if not DRIVE_AVAILABLE:
         raise RuntimeError("google-api-python-client no está instalado.")
 
+    # Prioridad 1: JSON completo en variable de entorno (Railway / producción)
+    json_str = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if json_str:
+        creds = service_account.Credentials.from_service_account_info(
+            json.loads(json_str), scopes=SCOPES
+        )
+        return build("drive", "v3", credentials=creds)
+
+    # Prioridad 2: archivo local (desarrollo)
     creds_path = os.getenv("GOOGLE_DRIVE_CREDENTIALS_PATH", "./credentials.json")
     if not Path(creds_path).exists():
         raise FileNotFoundError(
             f"No se encontró el archivo de credenciales en {creds_path}. "
-            "Configurá GOOGLE_DRIVE_CREDENTIALS_PATH en .env"
+            "Configurá GOOGLE_SERVICE_ACCOUNT_JSON o GOOGLE_DRIVE_CREDENTIALS_PATH en .env"
         )
-
     creds = service_account.Credentials.from_service_account_file(creds_path, scopes=SCOPES)
     return build("drive", "v3", credentials=creds)
 

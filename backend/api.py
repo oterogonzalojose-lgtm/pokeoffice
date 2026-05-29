@@ -1,18 +1,35 @@
 import os
 import json
 import asyncio
+import logging
 from contextlib import asynccontextmanager
+from datetime import datetime
+from pathlib import Path
+
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 load_dotenv()
 
-from db.models import init_db, save_conversation, get_history
-from agents.vp import run_vp
-from mcp.sheets_client import load_config, get_spreadsheet_url, crear_planilla_maestra
+log = logging.getLogger("pokeoffice")
 
+from db.models import (
+    init_db, save_conversation, get_history,
+    listar_recordatorios, crear_recordatorio,
+    toggle_recordatorio, eliminar_recordatorio,
+    get_config, set_config, get_all_config,
+)
+from agents.vp import run_vp
+from mcp.sheets_client import (
+    load_config, crear_planilla_maestra, actualizar_formulas_planilla,
+    listar_stock, get_dashboard_data,
+)
+
+
+# ── WebSocket connection manager ──────────────────────────────────────────────
 
 class ConnectionManager:
     def __init__(self):
@@ -23,7 +40,8 @@ class ConnectionManager:
         self.active.append(ws)
 
     def disconnect(self, ws: WebSocket):
-        self.active.remove(ws)
+        if ws in self.active:
+            self.active.remove(ws)
 
     async def broadcast(self, data: dict):
         payload = json.dumps(data, ensure_ascii=False)
@@ -37,10 +55,66 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+# ── Scheduler jobs ────────────────────────────────────────────────────────────
+
+async def job_briefing_diario():
+    """Se ejecuta a las 9am. Genera un post-it de briefing del día."""
+    log.info("Scheduler: briefing diario")
+    try:
+        fecha_hoy = datetime.now().strftime("%A %d/%m/%Y").capitalize()
+        texto     = f"☀️ Briefing del día — {fecha_hoy}\nRevisá agenda, turnos y stock."
+        rec = await crear_recordatorio(texto, tipo="recordatorio", origen="scheduler")
+        await manager.broadcast({"type": "recordatorio_nuevo", "recordatorio": rec})
+    except Exception as e:
+        log.error("job_briefing_diario: %s", e)
+
+
+async def job_alerta_stock():
+    """Diario: verifica productos con stock bajo (≤5 unidades)."""
+    log.info("Scheduler: alerta stock")
+    try:
+        productos = listar_stock()
+        bajos = [
+            p for p in productos
+            if int(str(p.get("unidades", "0")).strip() or "0") <= 5
+               and p.get("codigo", "").strip()
+        ]
+        if not bajos:
+            return
+        lista = "\n".join(
+            f"• {p['descripcion'] or p['codigo']} — {p['unidades']} u."
+            for p in bajos[:8]
+        )
+        texto = f"📦 Stock bajo en {len(bajos)} producto(s):\n{lista}"
+        rec = await crear_recordatorio(texto, tipo="stock", origen="scheduler")
+        await manager.broadcast({"type": "recordatorio_nuevo", "recordatorio": rec})
+    except Exception as e:
+        log.error("job_alerta_stock: %s", e)
+
+
+async def iniciar_scheduler():
+    """Loop asíncrono que ejecuta los jobs en horario."""
+    import asyncio
+    while True:
+        now = datetime.now()
+        # Briefing a las 9:00
+        if now.hour == 9 and now.minute == 0:
+            await job_briefing_diario()
+        # Stock check a las 8:00 y 14:00
+        if now.hour in (8, 14) and now.minute == 0:
+            await job_alerta_stock()
+        await asyncio.sleep(60)   # revisar cada minuto
+
+
+# ── Lifespan ──────────────────────────────────────────────────────────────────
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    # Lanzar scheduler en background
+    scheduler_task = asyncio.create_task(iniciar_scheduler())
     yield
+    scheduler_task.cancel()
 
 
 app = FastAPI(title="Pokeoffice API", lifespan=lifespan)
@@ -53,19 +127,19 @@ app.add_middleware(
 )
 
 
-# ── WebSocket ──────────────────────────────────────────────────────────────────
+# ── WebSocket ─────────────────────────────────────────────────────────────────
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await manager.connect(ws)
     try:
         while True:
-            await ws.receive_text()  # keep-alive: client pings
+            await ws.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(ws)
 
 
-# ── REST ───────────────────────────────────────────────────────────────────────
+# ── Mensajes al VP ────────────────────────────────────────────────────────────
 
 class MessageRequest(BaseModel):
     message: str
@@ -84,20 +158,24 @@ async def send_message(req: MessageRequest):
     return {"response": result}
 
 
+# ── Historial ─────────────────────────────────────────────────────────────────
+
 @app.get("/history")
 async def history(limit: int = 20):
     return await get_history(limit)
 
 
+# ── Agentes ───────────────────────────────────────────────────────────────────
+
 @app.get("/agents")
 async def agents_info():
     return [
-        {"id": "vp",               "name": "VP / Jefe de Gabinete",   "color": "#4A90D9", "x": 400, "y": 260},
-        {"id": "atencion_cliente", "name": "Recepcionista",            "color": "#27AE60", "x": 110, "y": 160},
-        {"id": "contador",         "name": "Contador",                 "color": "#F39C12", "x": 230, "y": 160},
-        {"id": "proveedores",      "name": "Gest. Proveedores",        "color": "#8E44AD", "x": 350, "y": 160},
-        {"id": "rrhh",             "name": "RRHH / Legal",             "color": "#E74C3C", "x": 470, "y": 160},
-        {"id": "marketing",        "name": "Marketing",                "color": "#E91E63", "x": 590, "y": 160},
+        {"id": "vp",               "name": "VP / Jefe de Gabinete",  "color": "#4A90D9"},
+        {"id": "atencion_cliente", "name": "Recepcionista",           "color": "#27AE60"},
+        {"id": "contador",         "name": "Contador",                "color": "#F39C12"},
+        {"id": "proveedores",      "name": "Gest. Proveedores",       "color": "#8E44AD"},
+        {"id": "marketing",        "name": "Marketing & Diseño",      "color": "#E91E63"},
+        {"id": "programador",      "name": "Programador",             "color": "#607D8B"},
     ]
 
 
@@ -106,14 +184,14 @@ async def health():
     return {"status": "ok"}
 
 
-# ── Planilla Maestra ───────────────────────────────────────────────────────────
+# ── Planilla ──────────────────────────────────────────────────────────────────
 
 @app.get("/planilla")
 async def planilla_info():
     cfg = load_config()
     sid = cfg.get("spreadsheet_id")
     if not sid:
-        return {"configured": False, "message": "Planilla no configurada. Ejecutá scripts/crear_planilla.py"}
+        return {"configured": False}
     return {
         "configured": True,
         "spreadsheet_id": sid,
@@ -130,10 +208,123 @@ class SetupRequest(BaseModel):
 async def setup_planilla(req: SetupRequest):
     try:
         sid = crear_planilla_maestra(req.nombre_negocio)
-        return {
-            "ok": True,
-            "spreadsheet_id": sid,
-            "url": f"https://docs.google.com/spreadsheets/d/{sid}",
-        }
+        return {"ok": True, "spreadsheet_id": sid,
+                "url": f"https://docs.google.com/spreadsheets/d/{sid}"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+@app.post("/planilla/actualizar-formulas")
+async def fix_formulas():
+    try:
+        result = actualizar_formulas_planilla()
+        return {"ok": True, "message": result}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ── Recordatorios / Post-its ──────────────────────────────────────────────────
+
+@app.get("/recordatorios")
+async def get_recordatorios():
+    return await listar_recordatorios()
+
+
+class RecordatorioRequest(BaseModel):
+    texto:      str
+    tipo:       str = "recordatorio"
+    fecha:      str = ""
+    completado: bool = False
+    origen:     str = "manual"
+
+
+@app.post("/recordatorios")
+async def post_recordatorio(req: RecordatorioRequest):
+    rec = await crear_recordatorio(req.texto, req.tipo, req.origen)
+    # Broadcast para que todos los clientes conectados vean el nuevo post-it
+    await manager.broadcast({"type": "recordatorio_nuevo", "recordatorio": rec})
+    return rec
+
+
+@app.patch("/recordatorios/{rid}/toggle")
+async def patch_toggle(rid: int):
+    completado = await toggle_recordatorio(rid)
+    return {"id": rid, "completado": completado}
+
+
+@app.delete("/recordatorios/{rid}")
+async def delete_recordatorio(rid: int):
+    await eliminar_recordatorio(rid)
+    return {"ok": True}
+
+
+# ── Scheduler manual (para testing) ──────────────────────────────────────────
+
+@app.post("/scheduler/briefing")
+async def trigger_briefing():
+    """Dispara el briefing diario manualmente."""
+    await job_briefing_diario()
+    return {"ok": True}
+
+
+@app.post("/scheduler/stock")
+async def trigger_stock():
+    """Dispara el chequeo de stock manualmente."""
+    await job_alerta_stock()
+    return {"ok": True}
+
+
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+
+@app.get("/config")
+async def get_configuracion():
+    return await get_all_config()
+
+
+class ConfigRequest(BaseModel):
+    clave: str
+    valor: str
+
+
+@app.post("/config")
+async def set_configuracion(req: ConfigRequest):
+    await set_config(req.clave, req.valor)
+    return {"ok": True}
+
+
+class OnboardingRequest(BaseModel):
+    nombre_negocio:  str
+    nombre_jefe:     str
+    tipo_negocio:    str
+    moneda:          str = "ARS"
+    sector:          str = ""
+    descripcion:     str = ""
+
+
+@app.post("/config/onboarding")
+async def completar_onboarding(req: OnboardingRequest):
+    """Guarda toda la configuración inicial del negocio de una sola vez."""
+    campos = req.model_dump()
+    for clave, valor in campos.items():
+        if valor:
+            await set_config(clave, valor)
+    await set_config("onboarding_completado", "true")
+    return {"ok": True}
+
+
+@app.get("/dashboard")
+async def dashboard():
+    """KPIs financieros + stock bajo + últimos movimientos para el dashboard."""
+    try:
+        data = get_dashboard_data()
+        return data
+    except Exception as e:
+        log.error("dashboard: %s", e)
+        return {"error": str(e), "finanzas": {}, "movimientos": [], "stock_bajo": []}
+
+
+# ── Frontend estático (debe ir al final, después de todas las rutas API) ──────
+
+_FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
+if _FRONTEND_DIST.exists():
+    app.mount("/", StaticFiles(directory=_FRONTEND_DIST, html=True), name="static")
