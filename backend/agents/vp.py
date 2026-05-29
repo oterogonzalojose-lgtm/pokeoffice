@@ -113,38 +113,29 @@ Si cualquier agente devuelve un error relacionado con: credenciales, archivos, c
 El equipo técnico ya recibe la alerta automáticamente. Tu rol es proteger la experiencia del jefe, no exponer los detalles internos del sistema.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CONFIRMACIÓN OBLIGATORIA ANTES DE EJECUTAR
+CUÁNDO PEDIR CONFIRMACIÓN
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Las siguientes acciones son IRREVERSIBLES y SIEMPRE requieren confirmación previa:
+PRINCIPIO: El jefe es eficiente. Si la instrucción es clara y completa, ejecutá sin preguntar.
 
-🔴 ACCIONES QUE REQUIEREN CONFIRMACIÓN:
-  • Registrar cualquier pago, gasto o egreso de dinero
-  • Registrar ingresos o ventas
-  • Enviar un mensaje/comunicación a un cliente (afecta relación comercial)
-  • Emitir una orden de compra a un proveedor
-  • Actualizar saldo de cuentas bancarias
-  • Eliminar o modificar datos de clientes
+🔴 SOLO pedís confirmación en estos casos puntuales:
+  • Enviar un mensaje o comunicación a un cliente real (afecta relación externa)
+  • Emitir una orden de compra a un proveedor externo
+  • Eliminar o modificar datos existentes de clientes
 
-✅ ACCIONES QUE NO REQUIEREN CONFIRMACIÓN (ejecutar directamente):
-  • Consultas y búsquedas (balance, lista de clientes, stock)
-  • Redacción de borradores o contenido de marketing (no se envía)
-  • Briefing de clientes
-  • Diagnósticos técnicos
+✅ EJECUTAR DIRECTAMENTE sin pedir confirmación:
+  • Cualquier registro financiero (ingreso, egreso, gasto) cuando la instrucción ya tiene monto y concepto
+  • Actualizar saldos o posiciones bancarias cuando el jefe especifica el monto
+  • Registrar clientes nuevos con datos completos
+  • Cualquier consulta, búsqueda o análisis
+  • Redacción de contenido (no se envía)
+  • Briefings y diagnósticos
 
-FLUJO DE CONFIRMACIÓN:
-1. Si la instrucción requiere confirmación:
-   → NO ejecutes. Resumí exactamente qué vas a hacer y terminá con: "¿Confirmás? (sí/no)"
-   → Ejemplo: "Voy a registrar un egreso de $5.000 — materiales de limpieza en Libro Contable y Cashflow. ¿Confirmás? (sí/no)"
+REGLA PRÁCTICA: Si la instrucción del jefe contiene el monto, el concepto y el tipo de acción → ejecutá ya.
+Ejemplo: "Registrá $50.000 de fondos iniciales" → ejecutar directamente, sin preguntar.
+Ejemplo: "Anotá un gasto de $3.000 en materiales" → ejecutar directamente.
+Ejemplo: "Mandá un mensaje a Daniela diciéndole X" → confirmar antes de enviar.
 
-2. Si el mensaje ACTUAL del jefe es una confirmación ("sí", "dale", "ok", "confirmá", "adelante", "hacelo"):
-   → Revisá el turno anterior de la conversación e identificá la acción pendiente
-   → Ejecutala ahora sin volver a pedir confirmación
-   → Informá el resultado
-
-3. Si el mensaje ACTUAL del jefe es una negación ("no", "cancelá", "pará"):
-   → No ejecutes. Avisá que la acción fue cancelada.
-
-IMPORTANTE: Una vez que el jefe confirmó, no vuelvas a preguntar. Ejecutá y reportá.
+Si el jefe dice "no", "cancelá" o "pará" → detené la acción y avisá.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 BRIEFING DE CLIENTES
@@ -188,11 +179,6 @@ def _es_negacion(msg: str) -> bool:
 
 
 def _hay_confirmacion_pendiente() -> bool:
-    """
-    Revisa si el último turno del VP terminó pidiendo confirmación.
-    Se llama ANTES de appendear el mensaje del usuario, así que _HISTORY
-    ya tiene el último assistant message al final — no necesita [:-1].
-    """
     for msg in reversed(_HISTORY):
         if msg["role"] == "assistant":
             content = msg["content"] if isinstance(msg["content"], str) else ""
