@@ -6,7 +6,7 @@ import ChatInput from './components/ChatInput'
 import ActivityFeed from './components/ActivityFeed'
 import PostItBoard from './components/PostItBoard'
 import Dashboard from './components/Dashboard'
-import Onboarding from './components/Onboarding'
+import Onboarding, { SheetsIcon } from './components/Onboarding'
 import ConversationHistory from './components/ConversationHistory'
 import { useWebSocket } from './hooks/useWebSocket'
 
@@ -77,10 +77,10 @@ export default function App() {
   const [feedEvents, setFeedEvents]   = useState([])
   const [loading, setLoading]         = useState(false)
   const [lastUserMessage, setLastUserMessage] = useState('')
-  const [newReminder, setNewReminder] = useState(null)
+  const [newReminder,  setNewReminder]  = useState(null)
+  const [planillaUrl,  setPlanillaUrl]  = useState(null)
 
   useEffect(() => {
-    // Verificar si el onboarding fue completado
     fetch(`${API}/config`)
       .then(r => r.json())
       .then(cfg => {
@@ -88,6 +88,12 @@ export default function App() {
         if (!cfg.onboarding_completado) setShowOnboarding(true)
       })
       .catch(() => setShowOnboarding(true))
+
+    // Cargar URL de la planilla maestra si ya está configurada
+    fetch(`${API}/planilla`)
+      .then(r => r.json())
+      .then(p => { if (p.configured && p.url) setPlanillaUrl(p.url) })
+      .catch(() => {})
 
     fetch(`${API}/agents`)
       .then(r => r.json())
@@ -133,6 +139,7 @@ export default function App() {
         <Onboarding onComplete={cfg => {
           setNegocioConfig(cfg)
           setShowOnboarding(false)
+          if (cfg.planillaUrl) setPlanillaUrl(cfg.planillaUrl)
         }} />
       )}
 
@@ -148,6 +155,15 @@ export default function App() {
             <span className="text-xs font-mono text-gray-600 hidden sm:block">
               {negocioConfig.nombre_negocio}
             </span>
+          )}
+          {planillaUrl && (
+            <a href={planillaUrl} target="_blank" rel="noreferrer"
+              title="Abrir planilla maestra en Google Sheets"
+              className="flex items-center gap-1.5 bg-[#0f9d58] hover:bg-[#0d8f50]
+                         transition-colors px-2.5 py-1 rounded text-white">
+              <SheetsIcon size={14} />
+              <span className="text-[10px] font-mono font-bold hidden sm:inline">Planilla</span>
+            </a>
           )}
           <button
             onClick={() => setShowOnboarding(true)}
