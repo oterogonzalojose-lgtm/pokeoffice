@@ -28,6 +28,54 @@ function StatBox({ label, value, sub }) {
   )
 }
 
+// ── Planilla panel ────────────────────────────────────────────────────────────
+
+function PlanillaPanel({ tid, token, nombreNegocio }) {
+  const [status,  setStatus]  = useState(null)   // null | 'loading' | {ok, url, error}
+  const headers = { Authorization: `Bearer ${token}` }
+
+  async function handleCrear() {
+    setStatus('loading')
+    try {
+      const res  = await fetch(`${API}/api/admin/tenants/${tid}/crear-planilla`,
+        { method: 'POST', headers })
+      const json = await res.json()
+      setStatus(json)
+    } catch (e) {
+      setStatus({ ok: false, error: String(e) })
+    }
+  }
+
+  return (
+    <div className="bg-[#07070f] border border-[#1e1e3a] rounded p-3 flex items-center gap-3">
+      <div className="flex-1">
+        <p className="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-0.5">Planilla Maestra Google Sheets</p>
+        {status === 'loading' && (
+          <p className="text-xs font-mono text-yellow-400 animate-pulse">Creando planilla...</p>
+        )}
+        {status?.ok && (
+          <a href={status.url} target="_blank" rel="noreferrer"
+            className="text-xs font-mono text-green-400 hover:text-green-300 underline">
+            ✓ Planilla creada — Abrir →
+          </a>
+        )}
+        {status?.error && (
+          <p className="text-xs font-mono text-red-400">Error: {status.error}</p>
+        )}
+        {!status && (
+          <p className="text-xs font-mono text-gray-600">Sin planilla configurada</p>
+        )}
+      </div>
+      {!status && (
+        <button onClick={handleCrear}
+          className="bg-[#0f9d58] hover:bg-[#0d8f50] text-white font-mono text-xs px-3 py-1.5 rounded transition-colors shrink-0">
+          Crear planilla
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ── Detalle de tenant ──────────────────────────────────────────────────────────
 
 function TenantDetail({ tid, token, onBack }) {
@@ -97,6 +145,7 @@ function TenantDetail({ tid, token, onBack }) {
       {/* Métricas */}
       {tab === 'metricas' && (
         <div className="flex flex-col gap-4">
+          <PlanillaPanel tid={tid} token={token} nombreNegocio={data.nombre_negocio} />
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <StatBox label="Conversaciones" value={m.total_conversaciones} />
             <StatBox label="Últimos 7 días" value={m.conversaciones_7d} />
@@ -254,7 +303,11 @@ export default function AdminPanel({ token, onLogout }) {
     setSolicitudes(Array.isArray(data) ? data : [])
   }, [])
 
-  useEffect(() => { loadTenants() }, [loadTenants])
+  useEffect(() => {
+    loadTenants()
+    const interval = setInterval(loadTenants, 30000)
+    return () => clearInterval(interval)
+  }, [loadTenants])
   useEffect(() => { if (tab === 'feedback')    loadFeedback() },    [tab, loadFeedback])
   useEffect(() => { if (tab === 'solicitudes') loadSolicitudes() }, [tab, loadSolicitudes])
 

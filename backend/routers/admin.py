@@ -139,3 +139,20 @@ async def get_solicitudes(solo_pendientes: bool = True):
 async def patch_atender_solicitud(sid: int):
     await atender_solicitud(sid)
     return {"ok": True}
+
+
+# ── Crear planilla maestra desde admin ───────────────────────────────────────
+
+@router.post("/tenants/{tid}/crear-planilla", dependencies=[Depends(_require_admin)])
+async def crear_planilla_tenant(tid: str):
+    t = await get_tenant(tid)
+    if not t:
+        raise HTTPException(404, "Tenant no encontrado")
+    try:
+        from mcp.sheets_client import crear_planilla_maestra
+        nombre = t.get("nombre_negocio") or t["email"]
+        sid    = crear_planilla_maestra(nombre)
+        return {"ok": True, "spreadsheet_id": sid,
+                "url": f"https://docs.google.com/spreadsheets/d/{sid}"}
+    except Exception as e:
+        raise HTTPException(500, f"Error al crear planilla: {e}")
