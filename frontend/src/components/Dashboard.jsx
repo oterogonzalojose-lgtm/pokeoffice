@@ -195,13 +195,16 @@ export default function Dashboard() {
   )
 
   if (error) return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-2">
-      <p className="text-sm font-mono text-red-400">⚠️ {error}</p>
+    <div className="flex-1 flex flex-col items-center justify-center gap-3 p-4 text-center">
+      <span className="text-3xl">📊</span>
+      <p className="text-sm font-mono text-gray-400">
+        El dashboard estará disponible una vez que tu planilla maestra esté configurada.
+      </p>
       <p className="text-[10px] font-mono text-gray-600">
-        Ejecutá la migración primero: <code>python scripts/migrar_planilla.py</code>
+        El equipo de Pokeoffice te ayudará a configurarla.
       </p>
       <button onClick={fetchData}
-        className="text-xs font-mono text-blue-400 hover:text-blue-300 border border-blue-900 px-3 py-1 rounded mt-2">
+        className="text-xs font-mono text-blue-400 hover:text-blue-300 border border-blue-900 px-3 py-1 rounded mt-1">
         Reintentar
       </button>
     </div>
