@@ -22,5 +22,6 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 # Copiar el resto del backend
 COPY backend/ ./backend/
 
+WORKDIR /app/backend
 EXPOSE 8000
-CMD cd backend && uvicorn api:app --host 0.0.0.0 --port ${PORT:-8000}
+CMD ["sh", "-c", "uvicorn api:app --host 0.0.0.0 --port ${PORT:-8000}"]
