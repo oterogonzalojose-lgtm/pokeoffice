@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 load_dotenv()
@@ -329,5 +330,17 @@ async def dashboard():
 # ── Frontend estático (debe ir al final, después de todas las rutas API) ──────
 
 _FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
+
 if _FRONTEND_DIST.exists():
-    app.mount("/", StaticFiles(directory=_FRONTEND_DIST, html=True), name="static")
+    # Assets compilados por Vite (JS, CSS)
+    app.mount("/assets", StaticFiles(directory=_FRONTEND_DIST / "assets"), name="assets")
+    # Sprites y archivos públicos
+    sprites_dir = _FRONTEND_DIST / "sprites"
+    if sprites_dir.exists():
+        app.mount("/sprites", StaticFiles(directory=sprites_dir), name="sprites")
+
+    # SPA catch-all: cualquier ruta que no sea API devuelve index.html
+    # Esto permite /admin, /dashboard, etc. en el frontend
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        return FileResponse(_FRONTEND_DIST / "index.html")
