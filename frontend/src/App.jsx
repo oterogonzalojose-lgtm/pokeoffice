@@ -5,6 +5,7 @@ import ActivityFeed from './components/ActivityFeed'
 import PostItBoard from './components/PostItBoard'
 import Dashboard from './components/Dashboard'
 import Onboarding from './components/Onboarding'
+import ConversationHistory from './components/ConversationHistory'
 import { useWebSocket } from './hooks/useWebSocket'
 
 // En producción (Railway) el frontend se sirve desde el mismo origen → URL relativa ''
@@ -33,7 +34,7 @@ function SidebarPanel({ feedEvents }) {
     <div className="flex flex-col gap-1" style={{ minHeight: 360 }}>
       {/* Tab selector */}
       <div className="flex gap-1">
-        {[['actividad','📋 Actividad'], ['dashboard','📊 Dashboard']].map(([key, label]) => (
+        {[['actividad','📋 Actividad'], ['dashboard','📊 Dashboard'], ['historial','🕐 Historial']].map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)}
             className={`text-[10px] font-mono px-2 py-1 rounded transition-colors flex-1
               ${tab === key
@@ -46,10 +47,9 @@ function SidebarPanel({ feedEvents }) {
       {/* Panel content */}
       <div className="bg-[#07070f] border border-[#1e1e3a] rounded flex flex-col"
            style={{ height: 400 }}>
-        {tab === 'actividad'
-          ? <ActivityFeed events={feedEvents} />
-          : <Dashboard />
-        }
+        {tab === 'actividad' && <ActivityFeed events={feedEvents} />}
+        {tab === 'dashboard' && <Dashboard />}
+        {tab === 'historial' && <ConversationHistory />}
       </div>
     </div>
   )
