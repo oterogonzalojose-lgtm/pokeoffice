@@ -9,9 +9,45 @@ DB_PATH = _DATA_DIR / "pokeoffice.db"
 
 async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:
+        # ── Tablas de plataforma (multi-tenant) ───────────────────────────────
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS tenants (
+                id TEXT PRIMARY KEY,
+                nombre_negocio TEXT DEFAULT '',
+                email TEXT UNIQUE NOT NULL,
+                plan TEXT DEFAULT 'starter',
+                activo INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now')),
+                last_activity TEXT
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                email TEXT UNIQUE NOT NULL,
+                nombre TEXT DEFAULT '',
+                activo INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now')),
+                last_login TEXT
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS invitaciones (
+                id TEXT PRIMARY KEY,
+                tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                email TEXT NOT NULL,
+                codigo TEXT NOT NULL,
+                usado INTEGER DEFAULT 0,
+                expires_at TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        # ── Tablas operativas (con tenant_id para multi-tenancy futuro) ───────
         await db.execute("""
             CREATE TABLE IF NOT EXISTS conversations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT DEFAULT '',
                 user_message TEXT NOT NULL,
                 vp_response TEXT,
                 events TEXT DEFAULT '[]',
@@ -30,6 +66,7 @@ async def init_db():
         await db.execute("""
             CREATE TABLE IF NOT EXISTS recordatorios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT DEFAULT '',
                 texto TEXT NOT NULL,
                 tipo TEXT DEFAULT 'recordatorio',
                 fecha TEXT DEFAULT (strftime('%d/%m/%Y %H:%M', 'now', 'localtime')),
@@ -48,6 +85,7 @@ async def init_db():
         await db.execute("""
             CREATE TABLE IF NOT EXISTS vp_memoria (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT DEFAULT '',
                 tipo TEXT NOT NULL,
                 aprendizaje TEXT NOT NULL,
                 contexto TEXT DEFAULT '',

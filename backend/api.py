@@ -22,7 +22,9 @@ from db.models import (
     toggle_recordatorio, eliminar_recordatorio,
     get_config, set_config, get_all_config,
 )
+from db.admin_models import init_feedback_table
 from agents.vp import run_vp
+from routers.admin import router as admin_router
 from mcp.sheets_client import (
     load_config, crear_planilla_maestra, actualizar_formulas_planilla,
     listar_stock, get_dashboard_data,
@@ -111,13 +113,14 @@ async def iniciar_scheduler():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    # Lanzar scheduler en background
+    await init_feedback_table()
     scheduler_task = asyncio.create_task(iniciar_scheduler())
     yield
     scheduler_task.cancel()
 
 
 app = FastAPI(title="Pokeoffice API", lifespan=lifespan)
+app.include_router(admin_router)
 
 app.add_middleware(
     CORSMiddleware,

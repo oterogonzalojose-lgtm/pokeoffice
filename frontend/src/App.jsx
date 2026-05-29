@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
+import AdminLogin from './components/AdminLogin'
+import AdminPanel from './components/AdminPanel'
 import OfficeCanvas from './components/OfficeCanvas'
 import ChatInput from './components/ChatInput'
 import ActivityFeed from './components/ActivityFeed'
@@ -55,7 +57,19 @@ function SidebarPanel({ feedEvents }) {
   )
 }
 
+// ── Admin route ───────────────────────────────────────────────────────────────
+
+function AdminRoute() {
+  const [token, setToken] = useState(() => localStorage.getItem('admin_token'))
+  function handleLogout() { localStorage.removeItem('admin_token'); setToken(null) }
+  if (!token) return <AdminLogin onLogin={setToken} />
+  return <AdminPanel token={token} onLogout={handleLogout} />
+}
+
+// ── App principal ─────────────────────────────────────────────────────────────
+
 export default function App() {
+  if (window.location.pathname === '/admin') return <AdminRoute />
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [negocioConfig, setNegocioConfig]   = useState(null)
   const [agents, setAgents]           = useState([])
