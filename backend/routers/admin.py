@@ -17,6 +17,7 @@ from db.admin_models import (
     get_vp_memoria_tenant, get_metricas_tenant,
     listar_feedback, marcar_feedback_leido,
     listar_solicitudes, atender_solicitud,
+    listar_platform_events, actualizar_estado_event,
 )
 
 router   = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -160,6 +161,23 @@ async def vincular_planilla_tenant(tid: str, req: VincularAdminRequest):
                 "url": f"https://docs.google.com/spreadsheets/d/{sid}"}
     except Exception as e:
         raise HTTPException(500, f"Error al vincular planilla: {e}")
+
+
+# ── Platform Events (Master DEV) ─────────────────────────────────────────────
+
+ESTADOS_VALIDOS = {"pendiente", "en_desarrollo", "implementado", "descartado"}
+
+@router.get("/platform-events", dependencies=[Depends(_require_admin)])
+async def get_platform_events(tipo: str = "", estado: str = ""):
+    return await listar_platform_events(tipo=tipo, estado=estado)
+
+
+@router.patch("/platform-events/{eid}/estado", dependencies=[Depends(_require_admin)])
+async def patch_platform_event_estado(eid: int, estado: str):
+    if estado not in ESTADOS_VALIDOS:
+        raise HTTPException(400, f"Estado inválido. Opciones: {ESTADOS_VALIDOS}")
+    await actualizar_estado_event(eid, estado)
+    return {"ok": True}
 
 
 # ── Crear planilla maestra desde admin ───────────────────────────────────────

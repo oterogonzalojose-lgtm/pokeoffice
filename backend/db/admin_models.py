@@ -216,6 +216,64 @@ async def init_feedback_table():
                 created_at TEXT DEFAULT (datetime('now'))
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS platform_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT NOT NULL DEFAULT '',
+                tipo TEXT NOT NULL,
+                titulo TEXT NOT NULL,
+                descripcion TEXT NOT NULL DEFAULT '',
+                razonamiento TEXT DEFAULT '',
+                aplicabilidad INTEGER DEFAULT 5,
+                estado TEXT NOT NULL DEFAULT 'pendiente',
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        await db.commit()
+
+
+# ── Platform Events (Master DEV) ──────────────────────────────────────────────
+
+async def guardar_platform_event(tenant_id: str, tipo: str, titulo: str,
+                                  descripcion: str = "", razonamiento: str = "",
+                                  aplicabilidad: int = 5) -> dict:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "INSERT INTO platform_events "
+            "(tenant_id, tipo, titulo, descripcion, razonamiento, aplicabilidad) "
+            "VALUES (?,?,?,?,?,?)",
+            (tenant_id, tipo, titulo, descripcion, razonamiento, aplicabilidad),
+        )
+        await db.commit()
+        return {"id": cursor.lastrowid}
+
+
+async def listar_platform_events(tipo: str = "", estado: str = "") -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        conditions, params = [], []
+        if tipo:
+            conditions.append("pe.tipo = ?")
+            params.append(tipo)
+        if estado:
+            conditions.append("pe.estado = ?")
+            params.append(estado)
+        where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        cursor = await db.execute(
+            f"SELECT pe.*, t.nombre_negocio FROM platform_events pe "
+            f"LEFT JOIN tenants t ON pe.tenant_id = t.id "
+            f"{where} ORDER BY pe.created_at DESC LIMIT 200",
+            params,
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+
+async def actualizar_estado_event(eid: int, estado: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE platform_events SET estado = ? WHERE id = ?", (estado, eid)
+        )
         await db.commit()
 
 

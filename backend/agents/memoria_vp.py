@@ -76,8 +76,12 @@ async def procesar_post_conversacion(user_message: str, vp_response: str,
                                       tenant_id: str = ""):
     """
     Punto de entrada: extrae y guarda aprendizajes tras cada conversación.
+    Si el VP reportó dificultad técnica, dispara análisis del Master DEV.
     Se llama en background — no bloquea nada.
     """
+    import asyncio
+
+    # Extraer aprendizajes del VP
     try:
         memoria_actual = await obtener_memoria(limit=30, tenant_id=tenant_id)
         nuevos = await extraer_aprendizajes(user_message, vp_response, memoria_actual)
@@ -92,7 +96,16 @@ async def procesar_post_conversacion(user_message: str, vp_response: str,
                 )
                 log.info("Nuevo aprendizaje [%s]: %s", item.get("tipo"), item["aprendizaje"])
     except Exception as e:
-        log.error("procesar_post_conversacion: %s", e)
+        log.error("procesar_post_conversacion (memoria): %s", e)
+
+    # Si el VP tuvo una dificultad técnica → Master DEV analiza en background
+    if "dificultad técnica" in vp_response.lower():
+        try:
+            from .master_dev import analizar_conversacion
+            asyncio.create_task(analizar_conversacion(user_message, vp_response, tenant_id=tenant_id))
+            log.info("master_dev: análisis disparado para tenant=%s", tenant_id)
+        except Exception as e:
+            log.error("procesar_post_conversacion (master_dev): %s", e)
 
 
 def construir_contexto_memoria(memoria: list[dict], config: dict) -> str:

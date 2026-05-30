@@ -360,13 +360,29 @@ export default function AdminPanel({ token, onLogout }) {
     if (data) setSolicitudes(Array.isArray(data) ? data : [])
   }, [adminFetch])
 
+  const [platformEvents, setPlatformEvents] = useState([])
+  const [evFilter, setEvFilter] = useState({ tipo: '', estado: 'pendiente' })
+  const loadPlatformEvents = useCallback(async (filter = evFilter) => {
+    const params = new URLSearchParams()
+    if (filter.tipo)   params.set('tipo',   filter.tipo)
+    if (filter.estado) params.set('estado', filter.estado)
+    const data = await adminFetch(`/api/admin/platform-events?${params}`)
+    if (data) setPlatformEvents(Array.isArray(data) ? data : [])
+  }, [adminFetch, evFilter])
+
+  async function cambiarEstadoEvent(eid, estado) {
+    await adminFetch(`/api/admin/platform-events/${eid}/estado?estado=${estado}`, { method: 'PATCH' })
+    loadPlatformEvents()
+  }
+
   useEffect(() => {
     loadTenants()
     const interval = setInterval(loadTenants, 30000)
     return () => clearInterval(interval)
   }, [loadTenants])
-  useEffect(() => { if (tab === 'feedback')    loadFeedback() },    [tab, loadFeedback])
-  useEffect(() => { if (tab === 'solicitudes') loadSolicitudes() }, [tab, loadSolicitudes])
+  useEffect(() => { if (tab === 'feedback')    loadFeedback() },                         [tab, loadFeedback])
+  useEffect(() => { if (tab === 'solicitudes') loadSolicitudes() },                       [tab, loadSolicitudes])
+  useEffect(() => { if (tab === 'plataforma')  loadPlatformEvents(evFilter) },            [tab])  // eslint-disable-line
 
   async function handleCreateTenant(e) {
     e.preventDefault()
@@ -411,7 +427,7 @@ export default function AdminPanel({ token, onLogout }) {
 
       {/* Tabs */}
       <div className="border-b border-[#1e1e3a] px-6 flex gap-1 pt-2">
-        {[['tenants','🏠 Tenants'], ['solicitudes','📬 Solicitudes'], ['feedback','💬 Feedback']].map(([k, l]) => (
+        {[['tenants','🏠 Tenants'], ['solicitudes','📬 Solicitudes'], ['feedback','💬 Feedback'], ['plataforma','⚙️ Plataforma']].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`font-mono text-xs px-3 py-1.5 rounded-t transition-colors ${tab === k ? 'bg-[#1e1e3a] text-white' : 'text-gray-500 hover:text-gray-300'}`}>
             {l}
@@ -510,6 +526,113 @@ export default function AdminPanel({ token, onLogout }) {
                                px-2 py-1 rounded transition-colors shrink-0">
                     ✓ Atendida
                   </button>
+                </div>
+              ))
+            }
+          </div>
+        )}
+
+        {/* Plataforma tab */}
+        {tab === 'plataforma' && (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h2 className="font-mono text-sm font-bold text-white uppercase tracking-widest">
+                Master DEV — Eventos de plataforma
+              </h2>
+              <div className="flex items-center gap-2">
+                {/* Filtro tipo */}
+                <select value={evFilter.tipo}
+                  onChange={e => { const f = { ...evFilter, tipo: e.target.value }; setEvFilter(f); loadPlatformEvents(f) }}
+                  className="bg-[#0a0a18] border border-[#1e1e3a] rounded px-2 py-1 font-mono text-xs text-gray-300 focus:outline-none">
+                  <option value="">Todos los tipos</option>
+                  <option value="fix">Fix</option>
+                  <option value="mejora">Mejora</option>
+                </select>
+                {/* Filtro estado */}
+                <select value={evFilter.estado}
+                  onChange={e => { const f = { ...evFilter, estado: e.target.value }; setEvFilter(f); loadPlatformEvents(f) }}
+                  className="bg-[#0a0a18] border border-[#1e1e3a] rounded px-2 py-1 font-mono text-xs text-gray-300 focus:outline-none">
+                  <option value="pendiente">Pendientes</option>
+                  <option value="en_desarrollo">En desarrollo</option>
+                  <option value="implementado">Implementados</option>
+                  <option value="descartado">Descartados</option>
+                  <option value="">Todos</option>
+                </select>
+                <button onClick={() => loadPlatformEvents(evFilter)}
+                  className="text-[10px] font-mono text-blue-400 hover:text-blue-300">↻</button>
+              </div>
+            </div>
+
+            {platformEvents.length === 0
+              ? <p className="font-mono text-sm text-gray-600">Sin eventos registrados para estos filtros.</p>
+              : platformEvents.map(ev => (
+                <div key={ev.id}
+                  className={`bg-[#07070f] border rounded p-4 flex flex-col gap-2 ${
+                    ev.tipo === 'fix' ? 'border-red-900' : 'border-blue-900'
+                  }`}>
+                  {/* Header */}
+                  <div className="flex items-start gap-2 justify-between">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`font-mono text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
+                        ev.tipo === 'fix'
+                          ? 'bg-red-900 text-red-300'
+                          : 'bg-blue-900 text-blue-300'
+                      }`}>
+                        {ev.tipo}
+                      </span>
+                      <span className="font-mono text-sm text-white font-bold">{ev.titulo}</span>
+                    </div>
+                    {/* Aplicabilidad */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="font-mono text-[10px] text-gray-500">Aplicabilidad</span>
+                      <div className="w-16 bg-[#1e1e3a] rounded-full h-1.5">
+                        <div className={`h-1.5 rounded-full ${ev.tipo === 'fix' ? 'bg-red-500' : 'bg-blue-500'}`}
+                          style={{ width: `${(ev.aplicabilidad / 10) * 100}%` }} />
+                      </div>
+                      <span className="font-mono text-[10px] text-gray-400">{ev.aplicabilidad}/10</span>
+                    </div>
+                  </div>
+
+                  {/* Descripción */}
+                  <p className="font-mono text-xs text-gray-300">{ev.descripcion}</p>
+
+                  {/* Razonamiento */}
+                  {ev.razonamiento && (
+                    <p className="font-mono text-[10px] text-gray-500 italic border-l border-[#2a2a4a] pl-2">
+                      {ev.razonamiento}
+                    </p>
+                  )}
+
+                  {/* Footer */}
+                  <div className="flex items-center justify-between flex-wrap gap-2 mt-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] text-gray-600">
+                        {ev.nombre_negocio || ev.tenant_id?.slice(0, 8) || 'Sistema'}
+                      </span>
+                      <span className="text-gray-700">·</span>
+                      <span className="font-mono text-[10px] text-gray-600">{ev.created_at?.slice(0, 16)}</span>
+                    </div>
+                    {/* Acciones de estado */}
+                    <div className="flex items-center gap-1">
+                      {[
+                        ['pendiente',     'Pendiente',     '#1e1e3a'],
+                        ['en_desarrollo', 'En desarrollo', '#1e3a1e'],
+                        ['implementado',  'Implementado',  '#0a3d2a'],
+                        ['descartado',    'Descartado',    '#3a1e1e'],
+                      ].map(([st, label, bg]) => (
+                        <button key={st}
+                          onClick={() => cambiarEstadoEvent(ev.id, st)}
+                          style={{ background: ev.estado === st ? bg : 'transparent' }}
+                          className={`font-mono text-[10px] px-2 py-1 rounded border transition-colors ${
+                            ev.estado === st
+                              ? 'border-gray-600 text-white'
+                              : 'border-[#1e1e3a] text-gray-600 hover:text-gray-400'
+                          }`}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               ))
             }
