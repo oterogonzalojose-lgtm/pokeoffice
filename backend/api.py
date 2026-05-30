@@ -236,6 +236,43 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/api/admin/diag-google", dependencies=[])
+async def diag_google():
+    """Diagnóstico de credenciales Google — solo para debugging, remover en prod."""
+    results = {}
+    try:
+        from mcp.sheets_client import _creds, _drive
+        creds = _creds()
+        results["auth"] = "ok"
+        results["service_account_email"] = getattr(creds, "service_account_email", "n/a")
+    except Exception as e:
+        results["auth"] = f"ERROR: {e}"
+        return results
+    try:
+        drv = _drive()
+        files = drv.files().list(pageSize=1, fields="files(id,name)").execute()
+        results["drive_list"] = "ok"
+        results["drive_files_count"] = len(files.get("files", []))
+    except Exception as e:
+        results["drive_list"] = f"ERROR: {e}"
+    try:
+        from mcp.sheets_client import _sheets
+        svc = _sheets()
+        test = svc.spreadsheets().create(
+            body={"properties": {"title": "_test_diag_delete_me"}},
+            fields="spreadsheetId"
+        ).execute()
+        results["sheets_create"] = "ok"
+        results["test_spreadsheet_id"] = test["spreadsheetId"]
+        # Eliminar inmediatamente
+        drv = _drive()
+        drv.files().delete(fileId=test["spreadsheetId"]).execute()
+        results["sheets_delete"] = "ok"
+    except Exception as e:
+        results["sheets_create"] = f"ERROR: {e}"
+    return results
+
+
 # ── Planilla ──────────────────────────────────────────────────────────────────
 
 @app.get("/planilla")
