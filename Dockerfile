@@ -23,5 +23,9 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 COPY backend/ ./backend/
 
 WORKDIR /app/backend
+
+# Usar el volumen de Railway para persistencia; se puede sobreescribir con env var
+ENV DATA_DIR=/data
+
 EXPOSE 8000
-CMD ["sh", "-c", "uvicorn api:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "mkdir -p $DATA_DIR && uvicorn api:app --host 0.0.0.0 --port ${PORT:-8000}"]
