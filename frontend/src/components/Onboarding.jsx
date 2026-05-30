@@ -126,23 +126,88 @@ const STEPS = [
   },
 ]
 
-// ── Pantalla de creación de planilla ──────────────────────────────────────────
+const SERVICE_ACCOUNT = "pokeoffice-agent@pokeoffice.iam.gserviceaccount.com"
 
-function CreatingScreen() {
+// ── Pantalla de vinculación de planilla ───────────────────────────────────────
+
+function VincularScreen({ nombreNegocio, onVincular, onSkip }) {
+  const [url,     setUrl]     = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState('')
+
+  async function handleVincular() {
+    if (!url.trim()) return
+    setLoading(true)
+    setError('')
+    try {
+      const res  = await apiFetch('/planilla/vincular', {
+        method: 'POST',
+        body: JSON.stringify({ spreadsheet_id: url.trim(), nombre_negocio: nombreNegocio }),
+      })
+      const json = await res.json()
+      if (json.ok) {
+        onVincular(json.url)
+      } else {
+        setError(json.error || 'No se pudo vincular la planilla. Verificá que la compartiste correctamente.')
+      }
+    } catch {
+      setError('Error de conexión.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
-    <div className="flex flex-col items-center gap-6 py-4">
-      <div className="text-5xl animate-bounce">📊</div>
-      <div className="flex flex-col items-center gap-2">
-        <p className="text-white font-mono font-bold text-lg">Creando tu equipo...</p>
-        <p className="text-gray-500 font-mono text-sm text-center">
-          Estamos armando tu planilla maestra en Google Sheets.<br />Esto tarda unos segundos.
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-1">
+        <p className="text-white font-mono font-bold">Vinculá tu planilla Google Sheets</p>
+        <p className="text-xs font-mono text-gray-400">
+          Pokeoffice usa Google Sheets como base de datos de tu negocio.
+          Seguí estos pasos:
         </p>
       </div>
-      <div className="flex gap-1">
-        {[0, 1, 2].map(i => (
-          <div key={i} className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"
-            style={{ animationDelay: `${i * 0.2}s` }} />
+
+      <div className="flex flex-col gap-2">
+        {[
+          { n: 1, text: 'Abrí Google Drive y creá una nueva hoja de cálculo (Google Sheets)' },
+          { n: 2, text: <>Hacé click en <b className="text-white">Compartir</b> → agregá este email como <b className="text-white">Editor</b>:</> },
+          { n: 3, text: 'Copiá el link de la planilla y pegalo abajo' },
+        ].map(({ n, text }) => (
+          <div key={n} className="flex gap-2.5 items-start">
+            <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-mono font-bold flex items-center justify-center shrink-0 mt-0.5">{n}</span>
+            <p className="text-xs font-mono text-gray-300">{text}</p>
+          </div>
         ))}
+      </div>
+
+      <div className="bg-[#0a0a18] border border-[#2a2a4a] rounded px-3 py-2 flex items-center justify-between gap-2">
+        <code className="text-xs text-green-400 font-mono break-all">{SERVICE_ACCOUNT}</code>
+        <button onClick={() => navigator.clipboard?.writeText(SERVICE_ACCOUNT)}
+          className="text-[10px] font-mono text-gray-500 hover:text-gray-300 shrink-0">
+          copiar
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <input
+          value={url} onChange={e => setUrl(e.target.value)}
+          placeholder="https://docs.google.com/spreadsheets/d/..."
+          className="bg-[#0a0a18] border border-[#2a2a4a] focus:border-[#4a4a9a] outline-none
+                     px-3 py-2 text-sm text-white font-mono placeholder-gray-600 rounded"
+        />
+        {error && <p className="text-xs font-mono text-red-400">{error}</p>}
+      </div>
+
+      <div className="flex items-center justify-between">
+        <button onClick={onSkip}
+          className="text-xs font-mono text-gray-600 hover:text-gray-400">
+          Hacer esto después
+        </button>
+        <button onClick={handleVincular} disabled={!url.trim() || loading}
+          className="bg-[#0f9d58] hover:bg-[#0d8f50] disabled:bg-[#0a3d2a] disabled:cursor-not-allowed
+                     text-white px-5 py-2 text-sm font-mono font-bold rounded transition-colors">
+          {loading ? 'Vinculando...' : 'Vincular planilla →'}
+        </button>
       </div>
     </div>
   )
@@ -201,7 +266,7 @@ export function SheetsIcon({ size = 24 }) {
 
 export default function Onboarding({ onComplete }) {
   const [step,        setStep]        = useState(0)
-  const [phase,       setPhase]       = useState('wizard')   // 'wizard' | 'creating' | 'done'
+  const [phase,       setPhase]       = useState('wizard')   // 'wizard' | 'vincular' | 'done'
   const [planillaUrl, setPlanillaUrl] = useState(null)
   const [data, setData] = useState({
     nombre_jefe: '', nombre_negocio: '', tipo_negocio: '', descripcion: '', moneda: 'ARS',
@@ -212,9 +277,7 @@ export default function Onboarding({ onComplete }) {
   async function handleNext() {
     if (step < STEPS.length - 1) { setStep(s => s + 1); return }
 
-    // Último paso → guardar config + crear planilla
-    setPhase('creating')
-
+    // Último paso → guardar config y pasar a vincular planilla
     try {
       await apiFetch('/config/onboarding', {
         method: 'POST',
@@ -222,23 +285,18 @@ export default function Onboarding({ onComplete }) {
       })
     } catch { /* continuar aunque falle */ }
 
-    try {
-      const res  = await apiFetch('/planilla/setup', {
-        method: 'POST',
-        body: JSON.stringify({ nombre_negocio: data.nombre_negocio }),
-      })
-      const json = await res.json()
-      if (json.ok && json.url) setPlanillaUrl(json.url)
-    } catch { /* Google no configurado — continuar igual */ }
-
-    setPhase('done')
+    setPhase('vincular')
   }
 
-  if (phase === 'creating') {
+  if (phase === 'vincular') {
     return (
       <div className="fixed inset-0 bg-[#04040e] flex items-center justify-center z-50 p-4">
         <div className="w-full max-w-lg bg-[#07070f] border border-[#1e1e3a] rounded-lg p-8 shadow-2xl">
-          <CreatingScreen />
+          <VincularScreen
+            nombreNegocio={data.nombre_negocio}
+            onVincular={url => { setPlanillaUrl(url); setPhase('done') }}
+            onSkip={() => setPhase('done')}
+          />
         </div>
       </div>
     )

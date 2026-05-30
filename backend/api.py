@@ -311,6 +311,33 @@ async def setup_planilla(req: SetupRequest, request: Request):
         return {"ok": False, "error": str(e)}
 
 
+class VincularRequest(BaseModel):
+    spreadsheet_id: str
+    nombre_negocio: str = ""
+
+
+@app.post("/planilla/vincular")
+async def vincular_planilla(req: VincularRequest, request: Request):
+    """El usuario creó el sheet en su Drive y lo compartió con la service account.
+    Este endpoint configura las hojas y guarda el ID en la DB del tenant."""
+    from db.admin_models import set_tenant_spreadsheet_id
+    from mcp.sheets_client import configurar_planilla_existente
+    user = getattr(request.state, "user", {})
+    tenant_id = user.get("tenant_id", "")
+    sid = req.spreadsheet_id.strip()
+    # Extraer ID si pegaron la URL completa
+    if "spreadsheets/d/" in sid:
+        sid = sid.split("spreadsheets/d/")[1].split("/")[0].split("?")[0]
+    try:
+        configurar_planilla_existente(sid, req.nombre_negocio)
+        if tenant_id:
+            await set_tenant_spreadsheet_id(tenant_id, sid)
+        return {"ok": True, "spreadsheet_id": sid,
+                "url": f"https://docs.google.com/spreadsheets/d/{sid}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 @app.post("/planilla/actualizar-formulas")
 async def fix_formulas():
     try:
