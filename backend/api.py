@@ -30,7 +30,7 @@ from routers.admin import router as admin_router
 from routers.auth  import router as auth_router, JWT_SECRET, JWT_ALGORITHM
 from mcp.sheets_client import (
     load_config, crear_planilla_maestra, actualizar_formulas_planilla,
-    listar_stock, get_dashboard_data,
+    get_dashboard_data,
 )
 
 
@@ -63,38 +63,27 @@ manager = ConnectionManager()
 # ── Scheduler jobs ────────────────────────────────────────────────────────────
 
 async def job_briefing_diario():
-    """Se ejecuta a las 9am. Genera un post-it de briefing del día."""
+    """Se ejecuta a las 9am. Genera un post-it de briefing del día para cada tenant activo."""
     log.info("Scheduler: briefing diario")
     try:
+        from db.admin_models import listar_tenants
+        tenants = await listar_tenants()
         fecha_hoy = datetime.now().strftime("%A %d/%m/%Y").capitalize()
-        texto     = f"☀️ Briefing del día — {fecha_hoy}\nRevisá agenda, turnos y stock."
-        rec = await crear_recordatorio(texto, tipo="recordatorio", origen="scheduler")
-        await manager.broadcast({"type": "recordatorio_nuevo", "recordatorio": rec})
+        texto = f"☀️ Briefing del día — {fecha_hoy}\nRevisá agenda, turnos y stock."
+        for t in tenants:
+            if not t.get("activo"):
+                continue
+            rec = await crear_recordatorio(texto, tipo="recordatorio",
+                                           origen="scheduler", tenant_id=t["id"])
+            await manager.broadcast({"type": "recordatorio_nuevo", "recordatorio": rec})
     except Exception as e:
         log.error("job_briefing_diario: %s", e)
 
 
 async def job_alerta_stock():
     """Diario: verifica productos con stock bajo (≤5 unidades)."""
-    log.info("Scheduler: alerta stock")
-    try:
-        productos = listar_stock()
-        bajos = [
-            p for p in productos
-            if int(str(p.get("unidades", "0")).strip() or "0") <= 5
-               and p.get("codigo", "").strip()
-        ]
-        if not bajos:
-            return
-        lista = "\n".join(
-            f"• {p['descripcion'] or p['codigo']} — {p['unidades']} u."
-            for p in bajos[:8]
-        )
-        texto = f"📦 Stock bajo en {len(bajos)} producto(s):\n{lista}"
-        rec = await crear_recordatorio(texto, tipo="stock", origen="scheduler")
-        await manager.broadcast({"type": "recordatorio_nuevo", "recordatorio": rec})
-    except Exception as e:
-        log.error("job_alerta_stock: %s", e)
+    log.info("Scheduler: alerta stock — pendiente integración multi-tenant")
+    # TODO: iterar tenants con planilla configurada y verificar stock por sheet
 
 
 async def iniciar_scheduler():
@@ -198,23 +187,26 @@ class MessageRequest(BaseModel):
 
 
 @app.post("/message")
-async def send_message(req: MessageRequest):
+async def send_message(req: MessageRequest, request: Request):
+    user = getattr(request.state, "user", {})
+    tenant_id = user.get("tenant_id", "")
     events: list[dict] = []
 
     async def capture_and_broadcast(event: dict):
         events.append(event)
         await manager.broadcast(event)
 
-    result = await run_vp(req.message, broadcast=capture_and_broadcast)
-    await save_conversation(req.message, result, events)
+    result = await run_vp(req.message, broadcast=capture_and_broadcast, tenant_id=tenant_id)
+    await save_conversation(req.message, result, events, tenant_id=tenant_id)
     return {"response": result}
 
 
 # ── Historial ─────────────────────────────────────────────────────────────────
 
 @app.get("/history")
-async def history(limit: int = 20):
-    return await get_history(limit)
+async def history(request: Request, limit: int = 20):
+    tenant_id = getattr(request.state, "user", {}).get("tenant_id", "")
+    return await get_history(limit, tenant_id=tenant_id)
 
 
 # ── Agentes ───────────────────────────────────────────────────────────────────
@@ -234,43 +226,6 @@ async def agents_info():
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-
-
-@app.get("/api/admin/diag-google", dependencies=[])
-async def diag_google():
-    """Diagnóstico de credenciales Google — solo para debugging, remover en prod."""
-    results = {}
-    try:
-        from mcp.sheets_client import _creds, _drive
-        creds = _creds()
-        results["auth"] = "ok"
-        results["service_account_email"] = getattr(creds, "service_account_email", "n/a")
-    except Exception as e:
-        results["auth"] = f"ERROR: {e}"
-        return results
-    try:
-        drv = _drive()
-        files = drv.files().list(pageSize=1, fields="files(id,name)").execute()
-        results["drive_list"] = "ok"
-        results["drive_files_count"] = len(files.get("files", []))
-    except Exception as e:
-        results["drive_list"] = f"ERROR: {e}"
-    try:
-        from mcp.sheets_client import _sheets
-        svc = _sheets()
-        test = svc.spreadsheets().create(
-            body={"properties": {"title": "_test_diag_delete_me"}},
-            fields="spreadsheetId"
-        ).execute()
-        results["sheets_create"] = "ok"
-        results["test_spreadsheet_id"] = test["spreadsheetId"]
-        # Eliminar inmediatamente
-        drv = _drive()
-        drv.files().delete(fileId=test["spreadsheetId"]).execute()
-        results["sheets_delete"] = "ok"
-    except Exception as e:
-        results["sheets_create"] = f"ERROR: {e}"
-    return results
 
 
 # ── Planilla ──────────────────────────────────────────────────────────────────
@@ -350,8 +305,9 @@ async def fix_formulas():
 # ── Recordatorios / Post-its ──────────────────────────────────────────────────
 
 @app.get("/recordatorios")
-async def get_recordatorios():
-    return await listar_recordatorios()
+async def get_recordatorios(request: Request):
+    tenant_id = getattr(request.state, "user", {}).get("tenant_id", "")
+    return await listar_recordatorios(tenant_id=tenant_id)
 
 
 class RecordatorioRequest(BaseModel):
@@ -363,9 +319,9 @@ class RecordatorioRequest(BaseModel):
 
 
 @app.post("/recordatorios")
-async def post_recordatorio(req: RecordatorioRequest):
-    rec = await crear_recordatorio(req.texto, req.tipo, req.origen)
-    # Broadcast para que todos los clientes conectados vean el nuevo post-it
+async def post_recordatorio(req: RecordatorioRequest, request: Request):
+    tenant_id = getattr(request.state, "user", {}).get("tenant_id", "")
+    rec = await crear_recordatorio(req.texto, req.tipo, req.origen, tenant_id=tenant_id)
     await manager.broadcast({"type": "recordatorio_nuevo", "recordatorio": rec})
     return rec
 
@@ -401,8 +357,9 @@ async def trigger_stock():
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 
 @app.get("/config")
-async def get_configuracion():
-    return await get_all_config()
+async def get_configuracion(request: Request):
+    tenant_id = getattr(request.state, "user", {}).get("tenant_id", "")
+    return await get_all_config(tenant_id=tenant_id)
 
 
 class ConfigRequest(BaseModel):
@@ -411,8 +368,9 @@ class ConfigRequest(BaseModel):
 
 
 @app.post("/config")
-async def set_configuracion(req: ConfigRequest):
-    await set_config(req.clave, req.valor)
+async def set_configuracion(req: ConfigRequest, request: Request):
+    tenant_id = getattr(request.state, "user", {}).get("tenant_id", "")
+    await set_config(req.clave, req.valor, tenant_id=tenant_id)
     return {"ok": True}
 
 
@@ -426,13 +384,14 @@ class OnboardingRequest(BaseModel):
 
 
 @app.post("/config/onboarding")
-async def completar_onboarding(req: OnboardingRequest):
+async def completar_onboarding(req: OnboardingRequest, request: Request):
     """Guarda toda la configuración inicial del negocio de una sola vez."""
+    tenant_id = getattr(request.state, "user", {}).get("tenant_id", "")
     campos = req.model_dump()
     for clave, valor in campos.items():
         if valor:
-            await set_config(clave, valor)
-    await set_config("onboarding_completado", "true")
+            await set_config(clave, valor, tenant_id=tenant_id)
+    await set_config("onboarding_completado", "true", tenant_id=tenant_id)
     return {"ok": True}
 
 

@@ -154,8 +154,8 @@ FORMATO DE RESPUESTA
 - El resultado concreto (qué quedó registrado, qué se redactó, etc.)
 - Si falta información: pedila directamente, sin rodeos."""
 
-# Historial de conversación (máx 20 intercambios = 40 mensajes)
-_HISTORY: list[dict] = []
+# Historial de conversación por tenant (máx 20 intercambios = 40 mensajes por tenant)
+_HISTORY: dict[str, list[dict]] = {}
 MAX_HISTORY = 40
 
 
@@ -178,26 +178,29 @@ def _es_negacion(msg: str) -> bool:
     return m in _NEGACIONES or any(w in m for w in _NEGACIONES)
 
 
-def _hay_confirmacion_pendiente() -> bool:
-    for msg in reversed(_HISTORY):
+def _hay_confirmacion_pendiente(history: list[dict] | None = None) -> bool:
+    if history is None:
+        history = []
+    for msg in reversed(history):
         if msg["role"] == "assistant":
             content = msg["content"] if isinstance(msg["content"], str) else ""
             return "¿confirmás?" in content.lower() or "(sí/no)" in content.lower()
     return False
 
 
-async def run_vp(user_message: str, broadcast: Broadcaster = None) -> str:
-    global _HISTORY
+async def run_vp(user_message: str, broadcast: Broadcaster = None,
+                 tenant_id: str = "") -> str:
+    history = _HISTORY.setdefault(tenant_id, [])
 
     # Enriquecer el mensaje si es una confirmación para que el VP tenga contexto claro
     mensaje_enriquecido = user_message
-    if _es_confirmacion(user_message) and _hay_confirmacion_pendiente():
+    if _es_confirmacion(user_message) and _hay_confirmacion_pendiente(history):
         mensaje_enriquecido = (
             f"{user_message}\n\n"
             "[SISTEMA: El jefe acaba de confirmar la acción que vos describiste en el turno anterior. "
             "Ejecutá esa acción ahora sin volver a pedir confirmación.]"
         )
-    elif _es_negacion(user_message) and _hay_confirmacion_pendiente():
+    elif _es_negacion(user_message) and _hay_confirmacion_pendiente(history):
         mensaje_enriquecido = (
             f"{user_message}\n\n"
             "[SISTEMA: El jefe canceló la acción. Informalo y no ejecutes nada.]"
@@ -211,15 +214,15 @@ async def run_vp(user_message: str, broadcast: Broadcaster = None) -> str:
 
     # Construir system prompt dinámico con memoria + config del negocio
     try:
-        memoria  = await obtener_memoria(limit=25)
-        config   = await get_all_config()
+        memoria  = await obtener_memoria(limit=25, tenant_id=tenant_id)
+        config   = await get_all_config(tenant_id=tenant_id)
         contexto = construir_contexto_memoria(memoria, config)
         system   = f"{contexto}\n\n{_VP_SYSTEM}" if contexto else _VP_SYSTEM
     except Exception:
         system = _VP_SYSTEM
 
-    _HISTORY.append({"role": "user", "content": mensaje_enriquecido})
-    messages = list(_HISTORY)
+    history.append({"role": "user", "content": mensaje_enriquecido})
+    messages = list(history)
     iterations = 0
 
     try:
@@ -241,9 +244,9 @@ async def run_vp(user_message: str, broadcast: Broadcaster = None) -> str:
 
             if response.stop_reason == "end_turn":
                 result = safe_text(response.content)
-                _HISTORY.append({"role": "assistant", "content": result})
-                if len(_HISTORY) > MAX_HISTORY:
-                    _HISTORY[:] = _HISTORY[-MAX_HISTORY:]
+                history.append({"role": "assistant", "content": result})
+                if len(history) > MAX_HISTORY:
+                    _HISTORY[tenant_id] = history[-MAX_HISTORY:]
                 break
 
             # Procesar tool_use
@@ -305,6 +308,6 @@ async def run_vp(user_message: str, broadcast: Broadcaster = None) -> str:
         await broadcast({"type": "agent_state", "agent": "vp", "state": "idle", "message": ""})
 
     # Extraer aprendizajes en background (no bloquea la respuesta)
-    asyncio.create_task(procesar_post_conversacion(user_message, result))
+    asyncio.create_task(procesar_post_conversacion(user_message, result, tenant_id=tenant_id))
 
     return result

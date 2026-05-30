@@ -72,13 +72,14 @@ async def extraer_aprendizajes(user_message: str, vp_response: str,
         return []
 
 
-async def procesar_post_conversacion(user_message: str, vp_response: str):
+async def procesar_post_conversacion(user_message: str, vp_response: str,
+                                      tenant_id: str = ""):
     """
     Punto de entrada: extrae y guarda aprendizajes tras cada conversación.
     Se llama en background — no bloquea nada.
     """
     try:
-        memoria_actual = await obtener_memoria(limit=30)
+        memoria_actual = await obtener_memoria(limit=30, tenant_id=tenant_id)
         nuevos = await extraer_aprendizajes(user_message, vp_response, memoria_actual)
         for item in nuevos:
             if isinstance(item, dict) and item.get("aprendizaje"):
@@ -87,6 +88,7 @@ async def procesar_post_conversacion(user_message: str, vp_response: str):
                     aprendizaje=item["aprendizaje"],
                     contexto=user_message[:100],
                     relevancia=min(10, max(1, int(item.get("relevancia", 5)))),
+                    tenant_id=tenant_id,
                 )
                 log.info("Nuevo aprendizaje [%s]: %s", item.get("tipo"), item["aprendizaje"])
     except Exception as e:
