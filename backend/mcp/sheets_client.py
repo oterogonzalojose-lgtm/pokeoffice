@@ -118,15 +118,16 @@ def configurar_planilla_existente(sid: str, nombre_negocio: str = "Mi Negocio") 
     return sid
 
 
-def crear_planilla_maestra(nombre_negocio: str) -> str:
+def crear_planilla_maestra(nombre_negocio: str, email_cliente: Optional[str] = None) -> str:
     """
-    Crea la planilla maestra con las 3 hojas preconfiguradas.
-    Devuelve el spreadsheet_id para guardar en config.
+    Crea la planilla maestra con las 4 hojas preconfiguradas.
+    Si se provee email_cliente, transfiere el ownership al cliente y elimina
+    el permiso público — la service account mantiene acceso programático como writer.
+    Devuelve el spreadsheet_id.
     """
     svc = _sheets()
     drv = _drive()
 
-    # Create spreadsheet skeleton
     body = {
         "properties": {"title": f"{nombre_negocio} — Planilla Maestra Pokeoffice"},
         "sheets": [
@@ -140,16 +141,26 @@ def crear_planilla_maestra(nombre_negocio: str) -> str:
     sid = result["spreadsheetId"]
 
     _setup_clientes(svc, sid)
-    _setup_cashflow(svc, sid)        # primero cashflow (libro contable lo referencia)
+    _setup_cashflow(svc, sid)
     _setup_libro_contable(svc, sid)
     _setup_stock(svc, sid)
     _apply_formats(svc, sid)
 
-    # Make it accessible to anyone with link (so the owner can open it)
-    drv.permissions().create(
-        fileId=sid,
-        body={"type": "anyone", "role": "writer"},
-    ).execute()
+    if email_cliente:
+        # Transferir ownership al cliente — la service account queda como writer
+        # automáticamente (Google la degrada al ceder la propiedad).
+        drv.permissions().create(
+            fileId=sid,
+            body={"type": "user", "role": "owner", "emailAddress": email_cliente},
+            transferOwnership=True,
+        ).execute()
+        # Sin permiso público — solo el cliente (owner) y la service account (writer)
+    else:
+        # Sin email de cliente: acceso público con link como fallback de desarrollo
+        drv.permissions().create(
+            fileId=sid,
+            body={"type": "anyone", "role": "writer"},
+        ).execute()
 
     save_config({"spreadsheet_id": sid, "business_name": nombre_negocio})
     return sid

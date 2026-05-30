@@ -147,7 +147,7 @@ async def crear_planilla_tenant(tid: str):
     try:
         from mcp.sheets_client import crear_planilla_maestra
         nombre = t.get("nombre_negocio") or t["email"]
-        sid    = crear_planilla_maestra(nombre)
+        sid    = crear_planilla_maestra(nombre, email_cliente=t["email"])
         return {"ok": True, "spreadsheet_id": sid,
                 "url": f"https://docs.google.com/spreadsheets/d/{sid}"}
     except Exception as e:
