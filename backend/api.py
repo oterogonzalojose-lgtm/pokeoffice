@@ -189,15 +189,18 @@ class MessageRequest(BaseModel):
 @app.post("/message")
 async def send_message(req: MessageRequest, request: Request):
     user = getattr(request.state, "user", {})
-    tenant_id = user.get("tenant_id", "")
+    tenant_id  = user.get("tenant_id", "")
+    user_email = user.get("email", "")
     events: list[dict] = []
 
     async def capture_and_broadcast(event: dict):
         events.append(event)
         await manager.broadcast(event)
 
-    result = await run_vp(req.message, broadcast=capture_and_broadcast, tenant_id=tenant_id)
-    await save_conversation(req.message, result, events, tenant_id=tenant_id)
+    result = await run_vp(req.message, broadcast=capture_and_broadcast,
+                          tenant_id=tenant_id, user_email=user_email)
+    await save_conversation(req.message, result, events,
+                            tenant_id=tenant_id, user_email=user_email)
     return {"response": result}
 
 

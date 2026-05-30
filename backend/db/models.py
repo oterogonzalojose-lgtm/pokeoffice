@@ -117,6 +117,18 @@ async def init_db():
         except Exception:
             pass
 
+        # conversations: user_email
+        try:
+            await db.execute("ALTER TABLE conversations ADD COLUMN user_email TEXT DEFAULT ''")
+        except Exception:
+            pass
+
+        # vp_memoria: user_email
+        try:
+            await db.execute("ALTER TABLE vp_memoria ADD COLUMN user_email TEXT DEFAULT ''")
+        except Exception:
+            pass
+
         # configuracion: migrar de PK simple (clave) a compuesta (clave, tenant_id)
         cursor = await db.execute(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='configuracion'"
@@ -195,7 +207,8 @@ async def get_all_config(tenant_id: str = "") -> dict:
 # ── Memoria del VP (privada, por tenant) ──────────────────────────────────────
 
 async def guardar_aprendizaje(tipo: str, aprendizaje: str, contexto: str = "",
-                               relevancia: int = 5, tenant_id: str = ""):
+                               relevancia: int = 5, tenant_id: str = "",
+                               user_email: str = ""):
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
             "SELECT id FROM vp_memoria WHERE aprendizaje = ? AND tenant_id = ?",
@@ -204,9 +217,9 @@ async def guardar_aprendizaje(tipo: str, aprendizaje: str, contexto: str = "",
         if await cursor.fetchone():
             return
         await db.execute(
-            "INSERT INTO vp_memoria (tenant_id, tipo, aprendizaje, contexto, relevancia) "
-            "VALUES (?,?,?,?,?)",
-            (tenant_id, tipo, aprendizaje, contexto, relevancia),
+            "INSERT INTO vp_memoria (tenant_id, user_email, tipo, aprendizaje, contexto, relevancia) "
+            "VALUES (?,?,?,?,?,?)",
+            (tenant_id, user_email, tipo, aprendizaje, contexto, relevancia),
         )
         await db.commit()
 
@@ -281,12 +294,13 @@ async def eliminar_recordatorio(rid: int):
 
 
 async def save_conversation(user_message: str, vp_response: str, events: list,
-                             tenant_id: str = "") -> int:
+                             tenant_id: str = "", user_email: str = "") -> int:
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
-            "INSERT INTO conversations (tenant_id, user_message, vp_response, events) "
-            "VALUES (?, ?, ?, ?)",
-            (tenant_id, user_message, vp_response, json.dumps(events, ensure_ascii=False)),
+            "INSERT INTO conversations (tenant_id, user_email, user_message, vp_response, events) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (tenant_id, user_email, user_message, vp_response,
+             json.dumps(events, ensure_ascii=False)),
         )
         await db.commit()
         return cursor.lastrowid

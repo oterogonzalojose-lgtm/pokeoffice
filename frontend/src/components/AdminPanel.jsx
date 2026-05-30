@@ -212,9 +212,16 @@ function TenantDetail({ tid, token, onBack }) {
             ? <p className="text-gray-600 font-mono text-sm">Sin aprendizajes registrados aún.</p>
             : memoria.map((m, i) => (
               <div key={i} className="bg-[#07070f] border border-[#1e1e3a] rounded p-3">
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <Badge color="#1e3a5f">{m.tipo}</Badge>
-                  <span className="text-[10px] font-mono text-gray-600">relevancia {m.relevancia}/10 · {m.usos} usos</span>
+                  {m.user_email && (
+                    <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[#0d2a1a] text-green-400">
+                      👤 {m.user_email}
+                    </span>
+                  )}
+                  <span className="text-[10px] font-mono text-gray-600">
+                    relevancia {m.relevancia}/10 · {m.usos} usos
+                  </span>
                 </div>
                 <p className="font-mono text-sm text-gray-200">{m.aprendizaje}</p>
                 {m.contexto && <p className="font-mono text-xs text-gray-500 mt-1">{m.contexto}</p>}

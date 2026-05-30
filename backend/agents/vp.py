@@ -164,8 +164,8 @@ FORMATO DE RESPUESTA
 - El resultado concreto (qué quedó registrado, qué se redactó, etc.)
 - Si falta información: pedila directamente, sin rodeos."""
 
-# Historial de conversación por tenant (máx 20 intercambios = 40 mensajes por tenant)
-_HISTORY: dict[str, list[dict]] = {}
+# Historial por (tenant_id, user_email) — cada usuario tiene su propia sesión
+_HISTORY: dict[tuple[str, str], list[dict]] = {}
 MAX_HISTORY = 40
 
 
@@ -199,8 +199,9 @@ def _hay_confirmacion_pendiente(history: list[dict] | None = None) -> bool:
 
 
 async def run_vp(user_message: str, broadcast: Broadcaster = None,
-                 tenant_id: str = "") -> str:
-    history = _HISTORY.setdefault(tenant_id, [])
+                 tenant_id: str = "", user_email: str = "") -> str:
+    history_key = (tenant_id, user_email)
+    history = _HISTORY.setdefault(history_key, [])
 
     # Enriquecer el mensaje si es una confirmación para que el VP tenga contexto claro
     mensaje_enriquecido = user_message
@@ -226,7 +227,7 @@ async def run_vp(user_message: str, broadcast: Broadcaster = None,
     try:
         memoria  = await obtener_memoria(limit=25, tenant_id=tenant_id)
         config   = await get_all_config(tenant_id=tenant_id)
-        contexto = construir_contexto_memoria(memoria, config)
+        contexto = construir_contexto_memoria(memoria, config, user_email=user_email)
         system   = f"{contexto}\n\n{_VP_SYSTEM}" if contexto else _VP_SYSTEM
     except Exception:
         system = _VP_SYSTEM
@@ -256,7 +257,7 @@ async def run_vp(user_message: str, broadcast: Broadcaster = None,
                 result = safe_text(response.content)
                 history.append({"role": "assistant", "content": result})
                 if len(history) > MAX_HISTORY:
-                    _HISTORY[tenant_id] = history[-MAX_HISTORY:]
+                    _HISTORY[history_key] = history[-MAX_HISTORY:]
                 break
 
             # Procesar tool_use
@@ -318,6 +319,8 @@ async def run_vp(user_message: str, broadcast: Broadcaster = None,
         await broadcast({"type": "agent_state", "agent": "vp", "state": "idle", "message": ""})
 
     # Extraer aprendizajes en background (no bloquea la respuesta)
-    asyncio.create_task(procesar_post_conversacion(user_message, result, tenant_id=tenant_id))
+    asyncio.create_task(procesar_post_conversacion(
+        user_message, result, tenant_id=tenant_id, user_email=user_email
+    ))
 
     return result

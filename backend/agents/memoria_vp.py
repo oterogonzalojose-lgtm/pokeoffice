@@ -41,15 +41,17 @@ Formato de respuesta (JSON puro, sin markdown):
 
 
 async def extraer_aprendizajes(user_message: str, vp_response: str,
-                                memoria_actual: list[dict]) -> list[dict]:
+                                memoria_actual: list[dict],
+                                user_email: str = "") -> list[dict]:
     """
     Analiza una conversación y extrae nuevos aprendizajes.
     Corre en background — no bloquea la respuesta al usuario.
     """
     ya_sabe = "\n".join(f"- {m['aprendizaje']}" for m in memoria_actual[:20])
+    usuario_str = f"\nUSUARIO QUE HABLÓ: {user_email}" if user_email else ""
 
     prompt = (
-        f"INTERCAMBIO:\n"
+        f"INTERCAMBIO:{usuario_str}\n"
         f"Jefe: {user_message}\n"
         f"VP respondió: {vp_response[:300]}\n\n"
         f"APRENDIZAJES QUE YA TENÉS (no repetir):\n{ya_sabe or 'Ninguno aún.'}"
@@ -73,7 +75,7 @@ async def extraer_aprendizajes(user_message: str, vp_response: str,
 
 
 async def procesar_post_conversacion(user_message: str, vp_response: str,
-                                      tenant_id: str = ""):
+                                      tenant_id: str = "", user_email: str = ""):
     """
     Punto de entrada: extrae y guarda aprendizajes tras cada conversación.
     Si el VP reportó dificultad técnica, dispara análisis del Master DEV.
@@ -84,7 +86,8 @@ async def procesar_post_conversacion(user_message: str, vp_response: str,
     # Extraer aprendizajes del VP
     try:
         memoria_actual = await obtener_memoria(limit=30, tenant_id=tenant_id)
-        nuevos = await extraer_aprendizajes(user_message, vp_response, memoria_actual)
+        nuevos = await extraer_aprendizajes(user_message, vp_response, memoria_actual,
+                                            user_email=user_email)
         for item in nuevos:
             if isinstance(item, dict) and item.get("aprendizaje"):
                 await guardar_aprendizaje(
@@ -93,8 +96,10 @@ async def procesar_post_conversacion(user_message: str, vp_response: str,
                     contexto=user_message[:100],
                     relevancia=min(10, max(1, int(item.get("relevancia", 5)))),
                     tenant_id=tenant_id,
+                    user_email=user_email,
                 )
-                log.info("Nuevo aprendizaje [%s]: %s", item.get("tipo"), item["aprendizaje"])
+                log.info("Nuevo aprendizaje [%s] (%s): %s",
+                         item.get("tipo"), user_email or "anon", item["aprendizaje"])
     except Exception as e:
         log.error("procesar_post_conversacion (memoria): %s", e)
 
@@ -108,7 +113,8 @@ async def procesar_post_conversacion(user_message: str, vp_response: str,
             log.error("procesar_post_conversacion (master_dev): %s", e)
 
 
-def construir_contexto_memoria(memoria: list[dict], config: dict) -> str:
+def construir_contexto_memoria(memoria: list[dict], config: dict,
+                               user_email: str = "") -> str:
     """
     Construye el bloque de contexto privado que se inyecta al inicio
     del system prompt del VP en cada conversación.
@@ -125,32 +131,57 @@ def construir_contexto_memoria(memoria: list[dict], config: dict) -> str:
         partes.append("CONTEXTO DEL NEGOCIO:")
         if nombre_negocio: partes.append(f"  Negocio: {nombre_negocio}")
         if tipo_negocio:   partes.append(f"  Tipo: {tipo_negocio}")
-        if nombre_jefe:    partes.append(f"  El jefe se llama: {nombre_jefe}")
+        if nombre_jefe:    partes.append(f"  Jefe principal: {nombre_jefe}")
         partes.append(f"  Moneda: {moneda}")
 
-    # Memoria del VP
-    if memoria:
-        partes.append("\nLO QUE YA SABÉS DEL JEFE (usalo para no hacer preguntas innecesarias):")
-        por_tipo = {}
-        for m in memoria:
-            t = m.get("tipo", "preferencia")
-            por_tipo.setdefault(t, []).append(m["aprendizaje"])
+    # Usuario activo en esta sesión
+    if user_email:
+        partes.append(f"\nUSUARIO ACTIVO AHORA: {user_email}")
+        partes.append(
+            "  → Dirigite a esta persona directamente. "
+            "Si conocés su nombre por la memoria, usalo."
+        )
 
+    # Memoria del VP — separada por usuario cuando aplica
+    if memoria:
         etiquetas = {
             "preferencia": "Preferencias",
             "patron":      "Patrones recurrentes",
             "excepcion":   "Cuando NO preguntar",
             "cliente":     "Clientes clave",
-            "estilo":      "Estilo de comunicacion",
+            "estilo":      "Estilo de comunicación",
         }
-        for tipo, items in por_tipo.items():
-            partes.append(f"  {etiquetas.get(tipo, tipo.title())}:")
-            for item in items[:5]:
-                partes.append(f"    • {item}")
+
+        # Aprendizajes del usuario actual (más relevantes)
+        mem_usuario = [m for m in memoria if m.get("user_email") == user_email and user_email]
+        mem_equipo  = [m for m in memoria if m.get("user_email") != user_email or not user_email]
+
+        if mem_usuario:
+            partes.append(f"\nLO QUE SABÉS DE ESTE USUARIO ({user_email}):")
+            por_tipo: dict[str, list] = {}
+            for m in mem_usuario:
+                por_tipo.setdefault(m.get("tipo", "preferencia"), []).append(m["aprendizaje"])
+            for tipo, items in por_tipo.items():
+                partes.append(f"  {etiquetas.get(tipo, tipo.title())}:")
+                for item in items[:4]:
+                    partes.append(f"    • {item}")
+
+        if mem_equipo:
+            partes.append("\nDEL EQUIPO EN GENERAL:")
+            por_tipo2: dict[str, list] = {}
+            for m in mem_equipo:
+                por_tipo2.setdefault(m.get("tipo", "preferencia"), []).append(
+                    f"{m['aprendizaje']}"
+                    + (f" [{m['user_email']}]" if m.get("user_email") else "")
+                )
+            for tipo, items in por_tipo2.items():
+                partes.append(f"  {etiquetas.get(tipo, tipo.title())}:")
+                for item in items[:3]:
+                    partes.append(f"    • {item}")
 
         partes.append(
-            "\nAPLICÁ ESTE CONOCIMIENTO: antes de hacer una pregunta al jefe, "
-            "revisá si ya sabés la respuesta por los aprendizajes anteriores."
+            "\nAPLICÁ ESTE CONOCIMIENTO: antes de hacer una pregunta, "
+            "revisá si ya sabés la respuesta por la memoria."
         )
 
     return "\n".join(partes) if partes else ""
