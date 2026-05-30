@@ -68,22 +68,18 @@ function AdminRoute() {
   return <AdminPanel token={token} onLogout={handleLogout} />
 }
 
-// ── App principal ─────────────────────────────────────────────────────────────
+// ── App autenticada (todos los hooks van acá, sin early returns) ──────────────
 
-export default function App() {
-  if (window.location.pathname === '/admin') return <AdminRoute />
-
-  const [userToken, setUserToken] = useState(() => getToken())
-  if (!userToken) return <LoginScreen onLogin={() => setUserToken(getToken())} />
+function AuthenticatedApp() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [negocioConfig, setNegocioConfig]   = useState(null)
-  const [agents, setAgents]           = useState([])
-  const [agentStates, setAgentStates] = useState({})
-  const [feedEvents, setFeedEvents]   = useState([])
-  const [loading, setLoading]         = useState(false)
+  const [agents, setAgents]                 = useState([])
+  const [agentStates, setAgentStates]       = useState({})
+  const [feedEvents, setFeedEvents]         = useState([])
+  const [loading, setLoading]               = useState(false)
   const [lastUserMessage, setLastUserMessage] = useState('')
-  const [newReminder,  setNewReminder]  = useState(null)
-  const [planillaUrl,  setPlanillaUrl]  = useState(null)
+  const [newReminder, setNewReminder]       = useState(null)
+  const [planillaUrl, setPlanillaUrl]       = useState(null)
 
   useEffect(() => {
     apiFetch('/config')
@@ -199,8 +195,6 @@ export default function App() {
 
         {/* Sidebar */}
         <div className="w-72 flex flex-col gap-3">
-
-          {/* Tabs: Actividad / Dashboard */}
           <SidebarPanel feedEvents={feedEvents} />
 
           {/* Connections */}
@@ -237,9 +231,19 @@ export default function App() {
               ))}
             </div>
           </div>
-
         </div>
       </div>
     </div>
   )
+}
+
+// ── App principal ─────────────────────────────────────────────────────────────
+
+export default function App() {
+  if (window.location.pathname === '/admin') return <AdminRoute />
+
+  const [userToken, setUserToken] = useState(() => getToken())
+
+  if (!userToken) return <LoginScreen onLogin={() => setUserToken(getToken())} />
+  return <AuthenticatedApp />
 }
