@@ -4,7 +4,7 @@ Protegido con JWT firmado con ADMIN_SECRET.
 Nunca exponer estos endpoints al usuario final.
 """
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -24,14 +24,10 @@ _bearer  = HTTPBearer()
 
 ADMIN_SECRET   = os.getenv("ADMIN_SECRET", "cambiar-en-produccion")
 JWT_ALGORITHM  = "HS256"
-TOKEN_EXPIRE_H = 12
-
-
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
 def _make_token() -> str:
-    exp = datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRE_H)
-    return jwt.encode({"role": "admin", "exp": exp}, ADMIN_SECRET, algorithm=JWT_ALGORITHM)
+    return jwt.encode({"role": "admin"}, ADMIN_SECRET, algorithm=JWT_ALGORITHM)
 
 
 def _require_admin(creds: HTTPAuthorizationCredentials = Depends(_bearer)):
@@ -52,7 +48,7 @@ def admin_login(req: LoginRequest):
     expected = os.getenv("ADMIN_PASSWORD", "")
     if not expected or req.password != expected:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Contraseña incorrecta")
-    return {"token": _make_token(), "expires_in_hours": TOKEN_EXPIRE_H}
+    return {"token": _make_token()}
 
 
 # ── Tenants ───────────────────────────────────────────────────────────────────
