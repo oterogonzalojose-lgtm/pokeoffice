@@ -9,9 +9,12 @@ Estructura de la planilla:
 """
 import os
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+log = logging.getLogger("pokeoffice")
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -147,14 +150,23 @@ def crear_planilla_maestra(nombre_negocio: str, email_cliente: Optional[str] = N
     _apply_formats(svc, sid)
 
     if email_cliente:
-        # Transferir ownership al cliente — la service account queda como writer
-        # automáticamente (Google la degrada al ceder la propiedad).
-        drv.permissions().create(
-            fileId=sid,
-            body={"type": "user", "role": "owner", "emailAddress": email_cliente},
-            transferOwnership=True,
-        ).execute()
-        # Sin permiso público — solo el cliente (owner) y la service account (writer)
+        try:
+            # Intentar transferir ownership al cliente (requiere cuenta Google asociada al email).
+            # Gmail siempre funciona. Hotmail/Outlook solo si el usuario tiene cuenta Google vinculada.
+            drv.permissions().create(
+                fileId=sid,
+                body={"type": "user", "role": "owner", "emailAddress": email_cliente},
+                transferOwnership=True,
+            ).execute()
+            # Sin permiso público — solo el cliente (owner) y la service account (writer)
+        except Exception:
+            # Fallback: el email no tiene cuenta Google asociada.
+            # Compartir como writer para que igual pueda acceder con el link.
+            log.warning("No se pudo transferir ownership a %s — compartiendo como writer", email_cliente)
+            drv.permissions().create(
+                fileId=sid,
+                body={"type": "user", "role": "writer", "emailAddress": email_cliente},
+            ).execute()
     else:
         # Sin email de cliente: acceso público con link como fallback de desarrollo
         drv.permissions().create(
