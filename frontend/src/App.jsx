@@ -173,6 +173,11 @@ export default function App() {
             title="Configuración del negocio"
             className="text-gray-600 hover:text-gray-300 text-sm transition-colors"
           >⚙️</button>
+          <button
+            onClick={() => { clearToken(); window.location.reload() }}
+            title="Cerrar sesión"
+            className="text-gray-600 hover:text-red-400 text-sm transition-colors"
+          >🚪</button>
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-mono text-gray-500">{loading ? 'Procesando...' : 'En línea'}</span>
             <div className={`w-2 h-2 rounded-full ${loading ? 'bg-yellow-400 animate-pulse' : 'bg-green-500'}`} />
