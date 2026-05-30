@@ -285,23 +285,29 @@ export default function AdminPanel({ token, onLogout }) {
 
   const headers = { Authorization: `Bearer ${token}` }
 
+  const adminFetch = useCallback(async (path, opts = {}) => {
+    const res = await fetch(`${API}${path}`, { ...opts, headers: { ...headers, ...opts.headers } })
+    if (res.status === 401) { onLogout(); return null }
+    return res.json()
+  }, [token, onLogout])
+
   const loadTenants = useCallback(async () => {
     setLoading(true)
-    const data = await fetch(`${API}/api/admin/tenants`, { headers }).then(r => r.json())
-    setTenants(Array.isArray(data) ? data : [])
+    const data = await adminFetch('/api/admin/tenants')
+    if (data) setTenants(Array.isArray(data) ? data : [])
     setLoading(false)
-  }, [])
+  }, [adminFetch])
 
   const loadFeedback = useCallback(async () => {
-    const data = await fetch(`${API}/api/admin/feedback`, { headers }).then(r => r.json())
-    setFeedback(Array.isArray(data) ? data : [])
-  }, [])
+    const data = await adminFetch('/api/admin/feedback')
+    if (data) setFeedback(Array.isArray(data) ? data : [])
+  }, [adminFetch])
 
   const [solicitudes, setSolicitudes] = useState([])
   const loadSolicitudes = useCallback(async () => {
-    const data = await fetch(`${API}/api/admin/solicitudes`, { headers }).then(r => r.json())
-    setSolicitudes(Array.isArray(data) ? data : [])
-  }, [])
+    const data = await adminFetch('/api/admin/solicitudes')
+    if (data) setSolicitudes(Array.isArray(data) ? data : [])
+  }, [adminFetch])
 
   useEffect(() => {
     loadTenants()
