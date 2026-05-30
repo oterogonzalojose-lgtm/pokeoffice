@@ -139,6 +139,24 @@ async def init_db():
             )
             await db.execute("DROP TABLE _configuracion_old")
 
+        # Reasignar filas huérfanas (tenant_id='') al primer tenant activo.
+        # Esto ocurre una sola vez al actualizar desde una versión pre-multi-tenant.
+        cursor = await db.execute(
+            "SELECT COUNT(*) FROM configuracion WHERE tenant_id = ''"
+        )
+        orphan_count = (await cursor.fetchone())[0]
+        if orphan_count > 0:
+            cursor = await db.execute(
+                "SELECT id FROM tenants WHERE activo = 1 ORDER BY created_at ASC LIMIT 1"
+            )
+            first = await cursor.fetchone()
+            if first:
+                tid = first[0]
+                for table in ("configuracion", "vp_memoria", "conversations", "recordatorios"):
+                    await db.execute(
+                        f"UPDATE {table} SET tenant_id = ? WHERE tenant_id = ''", (tid,)
+                    )
+
         await db.commit()
 
 

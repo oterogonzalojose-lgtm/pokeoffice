@@ -129,6 +129,7 @@ function TenantDetail({ tid, token, onBack }) {
         <div>
           <h2 className="text-white font-mono font-bold text-base">{data.nombre_negocio || '(sin nombre)'}</h2>
           <p className="text-gray-500 font-mono text-xs">{data.email} · Plan: {data.plan} · {data.activo ? '🟢 Activo' : '🔴 Inactivo'}</p>
+          <p className="font-mono text-[10px] text-gray-700 select-all">{data.id}</p>
         </div>
       </div>
 
@@ -253,12 +254,32 @@ function TenantDetail({ tid, token, onBack }) {
 
 // ── Lista de tenants ───────────────────────────────────────────────────────────
 
+function CopyId({ id }) {
+  const [copied, setCopied] = useState(false)
+  function copy(e) {
+    e.stopPropagation()
+    navigator.clipboard?.writeText(id)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+  return (
+    <span className="inline-flex items-center gap-1 font-mono text-[10px] text-gray-600">
+      {id.slice(0, 8)}…
+      <button onClick={copy}
+        className="text-gray-700 hover:text-gray-400 transition-colors">
+        {copied ? '✓' : 'copiar'}
+      </button>
+    </span>
+  )
+}
+
 function TenantRow({ t, onSelect }) {
   return (
     <tr className="border-b border-[#1e1e3a] hover:bg-[#0d0d20] cursor-pointer transition-colors" onClick={() => onSelect(t.id)}>
       <td className="px-3 py-2.5">
         <p className="font-mono text-sm text-white">{t.nombre_negocio || '(sin nombre)'}</p>
         <p className="font-mono text-xs text-gray-500">{t.email}</p>
+        <CopyId id={t.id} />
       </td>
       <td className="px-3 py-2.5 font-mono text-xs text-gray-400">{t.plan}</td>
       <td className="px-3 py-2.5 font-mono text-xs text-gray-400 text-center">{t.user_count}/2</td>
