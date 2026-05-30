@@ -137,6 +137,31 @@ async def patch_atender_solicitud(sid: int):
     return {"ok": True}
 
 
+# ── Vincular planilla existente desde admin ───────────────────────────────────
+
+class VincularAdminRequest(BaseModel):
+    spreadsheet_id: str
+
+@router.post("/tenants/{tid}/vincular-planilla", dependencies=[Depends(_require_admin)])
+async def vincular_planilla_tenant(tid: str, req: VincularAdminRequest):
+    t = await get_tenant(tid)
+    if not t:
+        raise HTTPException(404, "Tenant no encontrado")
+    sid = req.spreadsheet_id.strip()
+    if "spreadsheets/d/" in sid:
+        sid = sid.split("spreadsheets/d/")[1].split("/")[0].split("?")[0]
+    try:
+        from mcp.sheets_client import configurar_planilla_existente
+        from db.admin_models import set_tenant_spreadsheet_id
+        nombre = t.get("nombre_negocio") or t["email"]
+        configurar_planilla_existente(sid, nombre)
+        await set_tenant_spreadsheet_id(tid, sid)
+        return {"ok": True, "spreadsheet_id": sid,
+                "url": f"https://docs.google.com/spreadsheets/d/{sid}"}
+    except Exception as e:
+        raise HTTPException(500, f"Error al vincular planilla: {e}")
+
+
 # ── Crear planilla maestra desde admin ───────────────────────────────────────
 
 @router.post("/tenants/{tid}/crear-planilla", dependencies=[Depends(_require_admin)])
