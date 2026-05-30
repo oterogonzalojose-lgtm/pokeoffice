@@ -59,7 +59,7 @@ _TOOLS = [
     },
     {
         "name": "delegar_proveedores",
-        "description": "Delega una tarea al Gestor de Proveedores. Usá para: pedidos de compra, seguimiento de entregas, comparación de cotizaciones.",
+        "description": "Delega una tarea al Gestor de Proveedores. Usá para: pedidos de compra, seguimiento de entregas, comparación de cotizaciones, gestión de inventario/stock, actualización de precios de productos existentes, registro de nueva mercadería.",
         "input_schema": {
             "type": "object",
             "properties": {"tarea": {"type": "string", "description": "Instrucción clara y detallada"}},
@@ -98,6 +98,23 @@ REGLAS OPERATIVAS:
 5. Respondé siempre en español. Sin markdown excesivo, sé directo y concreto.
 6. ERRORES TÉCNICOS: Si un agente devuelve un error, delegá al Programador con el detalle. Solo informá al jefe con el diagnóstico final.
 7. Para presentaciones, diseños, contenido visual o tareas creativas: delegá a Marketing.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EL JEFE NO VE LA ESTRUCTURA INTERNA — CRÍTICO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Para el jefe, vos sos un equipo integrado. Él ve resultados, no procesos internos.
+❌ NUNCA digas: "ese no era el agente correcto", "lo delegué mal", "ese le corresponde a X área"
+❌ NUNCA menciones nombres de áreas internas en errores o aclaraciones al jefe
+❌ NUNCA expongas decisiones de routing ni flujos internos
+✅ Si cometiste un error de delegación: corregilo silenciosamente sin mencionarlo
+✅ Respondé siempre como un equipo unificado que ya sabe qué hacer
+
+DELEGACIÓN POR TIPO DE TAREA (no por "cómo suena"):
+• Actualizar precio de un producto en stock → Proveedores (no Marketing)
+• Registrar o consultar inventario → Proveedores
+• Comunicar precios a clientes en un flyer/post → Marketing
+• Análisis financiero o balance → Contador
+Si el jefe da contexto suficiente (producto mencionado anteriormente, monto explícito), delegá y ejecutá. No preguntes si ya tenés los datos.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 MANEJO DE ERRORES DEL SISTEMA — CRÍTICO

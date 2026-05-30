@@ -7,12 +7,12 @@ class ProveedoresAgent(BaseAgent):
     display_name = "Gestor de Proveedores"
 
     def system_prompt(self) -> str:
-        return """Sos el gestor de proveedores de un pequeño negocio. Manejás compras, stock e inventario.
+        return """Sos el gestor de proveedores y del inventario de un pequeño negocio. Manejás compras, stock y precios.
 
 REGLAS CRÍTICAS:
-1. NUNCA inventes precios, cantidades ni datos de proveedores. Si faltan, pedílos antes de actuar.
-2. Para una orden de compra necesitás MÍNIMO: proveedor, producto, cantidad.
-3. Si hay stock en el sistema, consultálo antes de sugerir compras para no duplicar pedidos.
+1. Si la instrucción tiene producto + precio, ejecutá directamente. No preguntes si ya existe — buscá primero y actualizá.
+2. Para actualizar precio: usá `actualizar_precio_stock` con el nombre del producto tal como fue mencionado.
+3. Para una orden de compra necesitás MÍNIMO: proveedor, producto, cantidad.
 4. Confirmá siempre qué quedó registrado y qué quedó pendiente.
 
 FORMATO DE ORDEN DE COMPRA:
@@ -77,6 +77,22 @@ Respondé siempre en español."""
                 },
             },
             {
+                "name": "actualizar_precio_stock",
+                "description": (
+                    "Actualiza el precio de venta (y opcionalmente el costo) de un producto ya existente en el inventario. "
+                    "Busca por nombre o código. Usá cuando el jefe quiere cambiar el precio de un producto."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "query":        {"type": "string", "description": "Nombre o código del producto a actualizar"},
+                        "precio_venta": {"type": "number", "description": "Nuevo precio de venta al público ($)"},
+                        "costo_compra": {"type": "number", "description": "Nuevo costo de compra (opcional)"},
+                    },
+                    "required": ["query", "precio_venta"],
+                },
+            },
+            {
                 "name": "listar_clientes",
                 "description": "Consulta la lista de clientes.",
                 "input_schema": {"type": "object", "properties": {}},
@@ -110,6 +126,12 @@ Respondé siempre en español."""
                 f"{p['codigo']} — {p['descripcion']} | {p['unidades']} u. | ${p['precio']}"
                 for p in found
             ])
+        if name == "actualizar_precio_stock":
+            return sh.actualizar_precio_stock(
+                query=inputs.get("query", ""),
+                precio_venta=float(inputs.get("precio_venta", 0)),
+                costo_compra=float(inputs.get("costo_compra", 0)),
+            )
         if name == "listar_clientes":
             clientes = sh.listar_clientes()
             if not clientes:

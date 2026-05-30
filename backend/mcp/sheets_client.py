@@ -659,6 +659,50 @@ def registrar_entrada_stock(codigo: str, descripcion: str, unidades: int,
             f"Costo: ${costo_compra:,.0f} | Proveedor: {proveedor or '—'}")
 
 
+def actualizar_precio_stock(query: str, precio_venta: float = 0.0,
+                             costo_compra: float = 0.0) -> str:
+    """
+    Actualiza el precio de venta (y opcionalmente el costo) de un producto existente.
+    Busca por código o descripción (coincidencia parcial). Actualiza la primera coincidencia.
+    """
+    sid = get_spreadsheet_id()
+    svc = _sheets()
+    result = svc.spreadsheets().values().get(
+        spreadsheetId=sid, range="Stock!A2:J"
+    ).execute()
+    rows = result.get("values", [])
+    q = query.lower()
+    for i, row in enumerate(rows):
+        codigo_row = str(row[0]).strip().lower() if row else ""
+        desc_row   = str(row[4]).strip().lower() if len(row) > 4 else ""
+        if q in codigo_row or q in desc_row:
+            row_num = i + 2
+            nuevo_precio = precio_venta if precio_venta else (float(row[2]) if len(row) > 2 and row[2] else 0)
+            nuevo_costo  = costo_compra if costo_compra else (float(row[7]) if len(row) > 7 and row[7] else 0)
+            margen = round(nuevo_precio - nuevo_costo, 2) if nuevo_precio and nuevo_costo else ""
+            fecha  = datetime.now().strftime("%d/%m/%Y")
+            svc.spreadsheets().values().update(
+                spreadsheetId=sid,
+                range=f"Stock!C{row_num}:J{row_num}",
+                valueInputOption="USER_ENTERED",
+                body={"values": [[
+                    nuevo_precio,
+                    row[3] if len(row) > 3 else "",
+                    row[4] if len(row) > 4 else "",
+                    fecha,
+                    row[6] if len(row) > 6 else 5,
+                    nuevo_costo,
+                    row[8] if len(row) > 8 else "",
+                    margen,
+                ]]},
+            ).execute()
+            nombre = row[4] if len(row) > 4 else row[0]
+            return (f"✓ Precio actualizado: '{nombre}' — "
+                    f"Precio de venta: ${nuevo_precio:,.0f}"
+                    + (f" | Costo: ${nuevo_costo:,.0f}" if nuevo_costo else ""))
+    return f"No se encontró '{query}' en el stock. Verificá el nombre o código del producto."
+
+
 def buscar_producto(query: str) -> list[dict]:
     productos = listar_stock()
     q = query.lower()
