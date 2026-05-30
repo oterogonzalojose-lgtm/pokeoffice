@@ -131,14 +131,13 @@ async def listar_invitaciones_tenant(tid: str) -> list[dict]:
 # ── VP Memoria (prompt secreto) ───────────────────────────────────────────────
 
 async def get_vp_memoria_tenant(tid: str) -> list[dict]:
-    # En Phase 2 la memoria se guarda con tenant_id='' (sin scope aún).
-    # Devolvemos todas las memorias; en Phase 3 filtraremos por tid.
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             "SELECT tipo, aprendizaje, contexto, relevancia, usos, created_at, last_used "
-            "FROM vp_memoria "
+            "FROM vp_memoria WHERE tenant_id = ? "
             "ORDER BY relevancia DESC, usos DESC",
+            (tid,),
         )
         rows = await cursor.fetchall()
         return [dict(r) for r in rows]

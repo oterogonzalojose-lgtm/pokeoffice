@@ -76,11 +76,11 @@ def get_spreadsheet_id() -> str:
 def configurar_planilla_existente(sid: str, nombre_negocio: str = "Mi Negocio") -> str:
     """
     Configura un Google Sheet existente (ya compartido con la cuenta de servicio).
-    Renombra la hoja por defecto y agrega Libro Contable y Cashflow.
+    Estructura actual: Clientes | Finanzas | Stock
+    Las hojas "Libro Contable" y "Cashflow" están deprecadas y se eliminan si existen.
     """
     svc = _sheets()
 
-    # Get current sheets
     meta = svc.spreadsheets().get(spreadsheetId=sid).execute()
     existing = {s["properties"]["title"]: s["properties"]["sheetId"] for s in meta["sheets"]}
     default_sheet_id = list(existing.values())[0]
@@ -88,32 +88,34 @@ def configurar_planilla_existente(sid: str, nombre_negocio: str = "Mi Negocio") 
 
     requests = []
 
-    # Rename first sheet to "Clientes" if needed
-    if default_sheet_title != "Clientes":
+    # Renombrar la primera hoja a "Clientes" si es necesario
+    if default_sheet_title not in ("Clientes", "Finanzas", "Stock"):
         requests.append({"updateSheetProperties": {
             "properties": {"sheetId": default_sheet_id, "title": "Clientes",
                            "tabColor": {"red": 0.18, "green": 0.68, "blue": 0.38}},
             "fields": "title,tabColor",
         }})
 
-    # Add missing sheets
+    # Agregar hojas faltantes (estructura actual)
     for title, color in [
-        ("Libro Contable", {"red": 0.95, "green": 0.61, "blue": 0.07}),
-        ("Cashflow",       {"red": 0.29, "green": 0.56, "blue": 0.89}),
-        ("Stock",          {"red": 0.60, "green": 0.20, "blue": 0.80}),
+        ("Finanzas", {"red": 0.95, "green": 0.61, "blue": 0.07}),
+        ("Stock",    {"red": 0.60, "green": 0.20, "blue": 0.80}),
     ]:
         if title not in existing:
             requests.append({"addSheet": {"properties": {
                 "title": title, "tabColor": color,
             }}})
 
+    # Eliminar hojas deprecadas si existen
+    for deprecated in ("Libro Contable", "Cashflow"):
+        if deprecated in existing:
+            requests.append({"deleteSheet": {"sheetId": existing[deprecated]}})
+
     if requests:
         svc.spreadsheets().batchUpdate(spreadsheetId=sid, body={"requests": requests}).execute()
 
-    # Now set up content for each sheet
     _setup_clientes(svc, sid)
-    _setup_cashflow(svc, sid)        # primero cashflow (libro contable lo referencia)
-    _setup_libro_contable(svc, sid)
+    _setup_finanzas(svc, sid)
     _setup_stock(svc, sid)
     _apply_formats(svc, sid)
 
@@ -181,6 +183,32 @@ def _setup_clientes(svc, sid: str):
     _write(svc, sid, "Clientes!A1:G1", headers)
 
 
+def _setup_finanzas(svc, sid: str):
+    """Estructura unificada de la hoja Finanzas (reemplaza Libro Contable + Cashflow)."""
+    rows = [
+        ["FINANZAS — Libro Contable Unificado"],
+        [],
+        ["— RESUMEN DEL MES —"],
+        ["Ingresos del mes ($)",  "", "=SUMIF(F19:F,\"Ingreso\",D19:D)"],
+        ["Egresos del mes ($)",   "", "=SUMIF(F19:F,\"Egreso\",E19:E)"],
+        ["Resultado neto ($)",    "", "=C4-C5"],
+        ["Total liquidez ($)",    "", "=SUM(C10:C14)"],
+        [],
+        ["— POSICIÓN POR CUENTA —"],
+        ["Efectivo en caja",           "", 0],
+        ["Banco cte.",                 "", 0],
+        ["Banco (cja. ahorro)",        "", 0],
+        ["Mercado Pago",               "", 0],
+        ["Otros",                      "", 0],
+        ["TOTAL LIQUIDEZ",             "", "=SUM(C10:C14)"],
+        [],
+        [],
+        ["— MOVIMIENTOS —"],
+        ["Fecha", "N°", "Descripción", "Ingreso ($)", "Egreso ($)", "Categoría", "Cuenta", "Saldo acumulado"],
+    ]
+    _write(svc, sid, "Finanzas!A1:H19", rows)
+
+
 def _setup_libro_contable(svc, sid: str):
     # C5 y C6 usan fórmulas que referencian Cashflow para mantener sincronía automática.
     # C8 referencia la hoja Stock para calcular valor del inventario.
@@ -233,8 +261,9 @@ def _setup_cashflow(svc, sid: str):
 
 
 def _setup_stock(svc, sid: str):
-    headers = [["Código", "Unidades", "Precio ($)", "Promoción", "Descripción", "Última act."]]
-    _write(svc, sid, "Stock!A1:F1", headers)
+    headers = [["Código", "Unidades", "Precio ($)", "Promoción", "Descripción",
+                "Última act.", "Stock mínimo", "Costo compra ($)", "Proveedor", "Margen ($)"]]
+    _write(svc, sid, "Stock!A1:J1", headers)
 
 
 def _write(svc, sid: str, rng: str, values: list):
@@ -253,14 +282,15 @@ def _apply_formats(svc, sid: str):
 
     requests = []
     for title, row, color in [
-        ("Clientes",       0, {"red": 0.18, "green": 0.68, "blue": 0.38}),
-        ("Libro Contable", 0, {"red": 0.95, "green": 0.61, "blue": 0.07}),
-        ("Cashflow",       0, {"red": 0.29, "green": 0.56, "blue": 0.89}),
+        ("Clientes", 0, {"red": 0.18, "green": 0.68, "blue": 0.38}),
+        ("Finanzas", 0, {"red": 0.95, "green": 0.61, "blue": 0.07}),
+        ("Stock",    0, {"red": 0.60, "green": 0.20, "blue": 0.80}),
     ]:
-        sid_sheet = sheet_ids[title]
+        if title not in sheet_ids:
+            continue
         requests.append({
             "repeatCell": {
-                "range": {"sheetId": sid_sheet, "startRowIndex": row, "endRowIndex": row+1},
+                "range": {"sheetId": sheet_ids[title], "startRowIndex": row, "endRowIndex": row+1},
                 "cell": {"userEnteredFormat": {
                     "backgroundColor": color,
                     "textFormat": {"bold": True, "fontSize": 12},
@@ -269,9 +299,10 @@ def _apply_formats(svc, sid: str):
             }
         })
 
-    _sheets().spreadsheets().batchUpdate(
-        spreadsheetId=sid, body={"requests": requests}
-    ).execute()
+    if requests:
+        _sheets().spreadsheets().batchUpdate(
+            spreadsheetId=sid, body={"requests": requests}
+        ).execute()
 
 
 # ── Clientes ──────────────────────────────────────────────────────────────────
@@ -571,6 +602,63 @@ def actualizar_unidades_stock(codigo: str, delta: int) -> str:
     return f"Producto con código '{codigo}' no encontrado en Stock."
 
 
+def registrar_entrada_stock(codigo: str, descripcion: str, unidades: int,
+                             precio_venta: float = 0.0, costo_compra: float = 0.0,
+                             proveedor: str = "", stock_minimo: int = 5) -> str:
+    """
+    Registra entrada de mercadería al stock.
+    Si el producto ya existe (por código), suma las unidades y actualiza datos.
+    Si no existe, crea una nueva fila con todos los campos.
+    """
+    sid = get_spreadsheet_id()
+    svc = _sheets()
+    fecha = datetime.now().strftime("%d/%m/%Y")
+    margen = round(precio_venta - costo_compra, 2) if precio_venta and costo_compra else ""
+
+    result = svc.spreadsheets().values().get(
+        spreadsheetId=sid, range="Stock!A2:J"
+    ).execute()
+    rows = result.get("values", [])
+
+    for i, row in enumerate(rows):
+        if row and str(row[0]).strip().lower() == codigo.strip().lower():
+            try:
+                actuales = int(str(row[1]).strip() or "0")
+            except ValueError:
+                actuales = 0
+            nuevas = actuales + unidades
+            row_num = i + 2
+            svc.spreadsheets().values().update(
+                spreadsheetId=sid,
+                range=f"Stock!A{row_num}:J{row_num}",
+                valueInputOption="USER_ENTERED",
+                body={"values": [[
+                    codigo, nuevas, precio_venta or (row[2] if len(row) > 2 else ""),
+                    row[3] if len(row) > 3 else "",
+                    descripcion or (row[4] if len(row) > 4 else ""),
+                    fecha,
+                    stock_minimo or (row[6] if len(row) > 6 else 5),
+                    costo_compra or (row[7] if len(row) > 7 else ""),
+                    proveedor or (row[8] if len(row) > 8 else ""),
+                    margen,
+                ]]},
+            ).execute()
+            return (f"✓ Stock actualizado: '{descripcion or codigo}' — "
+                    f"{actuales} → {nuevas} unidades | Precio: ${precio_venta:,.0f} | "
+                    f"Costo: ${costo_compra:,.0f}")
+
+    # Producto nuevo
+    new_row = [[codigo, unidades, precio_venta, "", descripcion, fecha,
+                stock_minimo, costo_compra, proveedor, margen]]
+    svc.spreadsheets().values().append(
+        spreadsheetId=sid, range="Stock!A:J",
+        valueInputOption="USER_ENTERED", body={"values": new_row},
+    ).execute()
+    return (f"✓ Producto nuevo en stock: '{descripcion}' (código: {codigo}) — "
+            f"{unidades} unidades | Precio: ${precio_venta:,.0f} | "
+            f"Costo: ${costo_compra:,.0f} | Proveedor: {proveedor or '—'}")
+
+
 def buscar_producto(query: str) -> list[dict]:
     productos = listar_stock()
     q = query.lower()
@@ -671,11 +759,27 @@ def registrar_movimiento_finanzas(descripcion: str, ingreso: float = 0,
     if not fecha:
         fecha = datetime.now().strftime("%d/%m/%Y")
 
-    # Obtener último N° de movimiento
+    # Obtener últimos movimientos
     res = svc.spreadsheets().values().get(
         spreadsheetId=sid, range="Finanzas!A19:H"
     ).execute()
     movs = res.get("values", [])
+
+    # Dedup: si el último movimiento del día tiene el mismo monto y categoría, rechazar
+    if movs:
+        last = movs[-1]
+        try:
+            last_fecha   = str(last[0]) if len(last) > 0 else ""
+            last_ingreso = float(str(last[3]).replace(",","").replace("$","").strip() or "0") if len(last) > 3 else 0
+            last_egreso  = float(str(last[4]).replace(",","").replace("$","").strip() or "0") if len(last) > 4 else 0
+            last_cat     = str(last[5]) if len(last) > 5 else ""
+            same_monto   = (last_ingreso == ingreso and ingreso > 0) or (last_egreso == egreso and egreso > 0)
+            if same_monto and last_fecha == fecha and last_cat.lower() == categoria.lower():
+                monto = ingreso or egreso
+                return f"⚠ Movimiento duplicado detectado — ya existe '{str(last[2])}' por ${monto:,.0f} hoy. No se registró de nuevo."
+        except Exception:
+            pass
+
     n = len(movs) + 1
 
     row = [[fecha, n, descripcion,
