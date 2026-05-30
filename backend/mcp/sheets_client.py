@@ -131,17 +131,15 @@ def crear_planilla_maestra(nombre_negocio: str, email_cliente: Optional[str] = N
     svc = _sheets()
     drv = _drive()
 
-    body = {
-        "properties": {"title": f"{nombre_negocio} — Planilla Maestra Pokeoffice"},
-        "sheets": [
-            {"properties": {"title": "Clientes",       "index": 0, "tabColor": {"red": 0.18, "green": 0.68, "blue": 0.38}}},
-            {"properties": {"title": "Libro Contable", "index": 1, "tabColor": {"red": 0.95, "green": 0.61, "blue": 0.07}}},
-            {"properties": {"title": "Cashflow",       "index": 2, "tabColor": {"red": 0.29, "green": 0.56, "blue": 0.89}}},
-            {"properties": {"title": "Stock",          "index": 3, "tabColor": {"red": 0.60, "green": 0.20, "blue": 0.80}}},
-        ],
-    }
-    result = svc.spreadsheets().create(body=body, fields="spreadsheetId").execute()
-    sid = result["spreadsheetId"]
+    # Crear el archivo via Drive API (evita el 403 de Sheets API en proyectos sin Workspace)
+    drive_file = drv.files().create(
+        body={
+            "name": f"{nombre_negocio} — Planilla Maestra Pokeoffice",
+            "mimeType": "application/vnd.google-apps.spreadsheet",
+        },
+        fields="id",
+    ).execute()
+    sid = drive_file["id"]
 
     _setup_clientes(svc, sid)
     _setup_cashflow(svc, sid)
