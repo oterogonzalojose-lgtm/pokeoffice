@@ -157,9 +157,16 @@ async def user_auth_middleware(request: Request, call_next):
         payload = _jwt.decode(auth[7:], JWT_SECRET, algorithms=[JWT_ALGORITHM])
         if payload.get("role") != "user":
             raise ValueError("Not a user token")
-        request.state.user = payload
     except Exception:
         return JSONResponse({"detail": "Token inválido o expirado"}, status_code=401)
+
+    # Verificar que el tenant siga existiendo en la DB (puede haber sido eliminado)
+    from db.admin_models import get_tenant
+    tenant = await get_tenant(payload.get("tenant_id", ""))
+    if not tenant:
+        return JSONResponse({"detail": "Cuenta no encontrada"}, status_code=401)
+
+    request.state.user = payload
 
     return await call_next(request)
 
