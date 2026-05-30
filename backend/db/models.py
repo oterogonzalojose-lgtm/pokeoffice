@@ -105,6 +105,11 @@ async def init_db():
                 created_at TEXT DEFAULT (datetime('now'))
             )
         """)
+        # Migración: agregar spreadsheet_id a tenants si no existe (DB ya creada en prod)
+        try:
+            await db.execute("ALTER TABLE tenants ADD COLUMN spreadsheet_id TEXT DEFAULT NULL")
+        except Exception:
+            pass  # columna ya existe
         await db.commit()
 
 

@@ -57,6 +57,14 @@ async def toggle_tenant(tid: str, activo: bool):
         await db.commit()
 
 
+async def set_tenant_spreadsheet_id(tid: str, sid: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE tenants SET spreadsheet_id = ? WHERE id = ?", (sid, tid)
+        )
+        await db.commit()
+
+
 # ── Usuarios por tenant ───────────────────────────────────────────────────────
 
 async def listar_users_tenant(tid: str) -> list[dict]:

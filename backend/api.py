@@ -239,16 +239,18 @@ async def health():
 # ── Planilla ──────────────────────────────────────────────────────────────────
 
 @app.get("/planilla")
-async def planilla_info():
-    cfg = load_config()
-    sid = cfg.get("spreadsheet_id")
+async def planilla_info(request: Request):
+    from db.admin_models import get_tenant
+    user = getattr(request.state, "user", {})
+    tenant = await get_tenant(user.get("tenant_id", ""))
+    sid = tenant.get("spreadsheet_id") if tenant else None
     if not sid:
         return {"configured": False}
     return {
         "configured": True,
         "spreadsheet_id": sid,
         "url": f"https://docs.google.com/spreadsheets/d/{sid}",
-        "business_name": cfg.get("business_name", ""),
+        "business_name": tenant.get("nombre_negocio", ""),
     }
 
 
@@ -257,9 +259,15 @@ class SetupRequest(BaseModel):
 
 
 @app.post("/planilla/setup")
-async def setup_planilla(req: SetupRequest):
+async def setup_planilla(req: SetupRequest, request: Request):
+    from db.admin_models import set_tenant_spreadsheet_id
+    user = getattr(request.state, "user", {})
+    tenant_id   = user.get("tenant_id", "")
+    email_owner = user.get("email", "")
     try:
-        sid = crear_planilla_maestra(req.nombre_negocio)
+        sid = crear_planilla_maestra(req.nombre_negocio, email_cliente=email_owner or None)
+        if tenant_id:
+            await set_tenant_spreadsheet_id(tenant_id, sid)
         return {"ok": True, "spreadsheet_id": sid,
                 "url": f"https://docs.google.com/spreadsheets/d/{sid}"}
     except Exception as e:
