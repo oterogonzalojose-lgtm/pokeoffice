@@ -30,48 +30,78 @@ function StatBox({ label, value, sub }) {
 
 // ── Planilla panel ────────────────────────────────────────────────────────────
 
-function PlanillaPanel({ tid, token, nombreNegocio }) {
-  const [status,  setStatus]  = useState(null)   // null | 'loading' | {ok, url, error}
+function PlanillaPanel({ tid, token, spreadsheetId: initialSid }) {
+  const [sid,      setSid]      = useState(initialSid || '')
+  const [input,    setInput]    = useState('')
+  const [editing,  setEditing]  = useState(!initialSid)
+  const [loading,  setLoading]  = useState(false)
+  const [error,    setError]    = useState('')
   const headers = { Authorization: `Bearer ${token}` }
 
-  async function handleCrear() {
-    setStatus('loading')
+  const url = sid ? `https://docs.google.com/spreadsheets/d/${sid}` : null
+
+  async function handleVincular() {
+    if (!input.trim()) return
+    setLoading(true)
+    setError('')
     try {
-      const res  = await fetch(`${API}/api/admin/tenants/${tid}/crear-planilla`,
-        { method: 'POST', headers })
+      let id = input.trim()
+      if (id.includes('spreadsheets/d/'))
+        id = id.split('spreadsheets/d/')[1].split('/')[0].split('?')[0]
+      const res  = await fetch(`${API}/api/admin/tenants/${tid}/vincular-planilla`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spreadsheet_id: id }),
+      })
       const json = await res.json()
-      setStatus(json)
+      if (json.ok) { setSid(id); setEditing(false); setInput('') }
+      else setError(json.detail || 'No se pudo vincular')
     } catch (e) {
-      setStatus({ ok: false, error: String(e) })
+      setError(String(e))
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
-    <div className="bg-[#07070f] border border-[#1e1e3a] rounded p-3 flex items-center gap-3">
-      <div className="flex-1">
-        <p className="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-0.5">Planilla Maestra Google Sheets</p>
-        {status === 'loading' && (
-          <p className="text-xs font-mono text-yellow-400 animate-pulse">Creando planilla...</p>
-        )}
-        {status?.ok && (
-          <a href={status.url} target="_blank" rel="noreferrer"
-            className="text-xs font-mono text-green-400 hover:text-green-300 underline">
-            ✓ Planilla creada — Abrir →
+    <div className="bg-[#07070f] border border-[#1e1e3a] rounded p-3 flex flex-col gap-2">
+      <p className="text-[10px] font-mono text-gray-500 uppercase tracking-widest">Planilla Maestra Google Sheets</p>
+
+      {!editing && url && (
+        <div className="flex items-center gap-3">
+          <a href={url} target="_blank" rel="noreferrer"
+            className="text-xs font-mono text-green-400 hover:text-green-300 underline flex-1 truncate">
+            ✓ {sid}
           </a>
-        )}
-        {status?.error && (
-          <p className="text-xs font-mono text-red-400">Error: {status.error}</p>
-        )}
-        {!status && (
-          <p className="text-xs font-mono text-gray-600">Sin planilla configurada</p>
-        )}
-      </div>
-      {!status && (
-        <button onClick={handleCrear}
-          className="bg-[#0f9d58] hover:bg-[#0d8f50] text-white font-mono text-xs px-3 py-1.5 rounded transition-colors shrink-0">
-          Crear planilla
-        </button>
+          <button onClick={() => setEditing(true)}
+            className="text-[10px] font-mono text-gray-500 hover:text-gray-300 shrink-0">
+            cambiar
+          </button>
+        </div>
       )}
+
+      {editing && (
+        <div className="flex gap-2 items-center">
+          <input
+            value={input} onChange={e => setInput(e.target.value)}
+            placeholder="URL o ID de la planilla"
+            className="flex-1 bg-[#0a0a18] border border-[#2a2a4a] rounded px-2 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-[#4A90D9]"
+          />
+          <button onClick={handleVincular} disabled={!input.trim() || loading}
+            className="bg-[#0f9d58] hover:bg-[#0d8f50] disabled:bg-[#0a3d2a] text-white font-mono text-xs px-3 py-1.5 rounded transition-colors shrink-0">
+            {loading ? '...' : 'Vincular'}
+          </button>
+          {sid && (
+            <button onClick={() => { setEditing(false); setInput('') }}
+              className="text-[10px] font-mono text-gray-600 hover:text-gray-400">
+              cancelar
+            </button>
+          )}
+        </div>
+      )}
+
+      {error && <p className="text-[10px] font-mono text-red-400">{error}</p>}
+      {!editing && !url && <p className="text-xs font-mono text-gray-600">Sin planilla configurada</p>}
     </div>
   )
 }
@@ -146,7 +176,7 @@ function TenantDetail({ tid, token, onBack }) {
       {/* Métricas */}
       {tab === 'metricas' && (
         <div className="flex flex-col gap-4">
-          <PlanillaPanel tid={tid} token={token} nombreNegocio={data.nombre_negocio} />
+          <PlanillaPanel tid={tid} token={token} spreadsheetId={data.spreadsheet_id} />
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <StatBox label="Conversaciones" value={m.total_conversaciones} />
             <StatBox label="Últimos 7 días" value={m.conversaciones_7d} />
