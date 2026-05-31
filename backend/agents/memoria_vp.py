@@ -67,7 +67,11 @@ async def extraer_aprendizajes(user_message: str, vp_response: str,
             messages=[{"role": "user", "content": prompt}],
         )
         raw = resp.content[0].text.strip()
-        aprendizajes = json.loads(raw)
+        # Claude a veces envuelve en ```json ... ``` aunque el prompt diga "sin markdown"
+        if raw.startswith("```"):
+            lines = raw.split("\n")
+            raw = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+        aprendizajes = json.loads(raw.strip())
         if not isinstance(aprendizajes, list):
             return []
         return aprendizajes

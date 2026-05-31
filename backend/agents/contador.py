@@ -1,5 +1,6 @@
 import re
 from .base import BaseAgent, _client
+from .utils import call_with_retry, safe_text
 from mcp import sheets_client as sh
 
 
@@ -68,22 +69,28 @@ Respondé en español, de forma concisa y profesional."""
             await self._emit(broadcast, "working", "Registrando ingreso...")
             monto = self._extraer_monto(task)
             desc  = self._extraer_descripcion(task)
-            try:
-                r1 = sh.registrar_movimiento_finanzas(descripcion=desc, ingreso=monto, categoria="Ingreso")
-                contexto = f"Registrado: {r1}"
-            except Exception as e:
-                contexto = f"Error al registrar: {e}"
+            if not monto:
+                contexto = "No pude identificar el monto del ingreso. Por favor indicá el importe exacto (ej: $5000)."
+            else:
+                try:
+                    r1 = sh.registrar_movimiento_finanzas(descripcion=desc, ingreso=monto, categoria="Ingreso")
+                    contexto = f"Registrado: {r1}"
+                except Exception as e:
+                    contexto = f"Error al registrar: {e}"
 
         # ── Registrar egreso / gasto ──────────────────────────────────────────
         elif any(w in task_lower for w in _EXPENSE):
             await self._emit(broadcast, "working", "Registrando egreso...")
             monto = self._extraer_monto(task)
             desc  = self._extraer_descripcion(task)
-            try:
-                r1 = sh.registrar_movimiento_finanzas(descripcion=desc, egreso=monto, categoria="Egreso")
-                contexto = f"Registrado: {r1}"
-            except Exception as e:
-                contexto = f"Error al registrar: {e}"
+            if not monto:
+                contexto = "No pude identificar el monto del egreso. Por favor indicá el importe exacto (ej: $5000)."
+            else:
+                try:
+                    r1 = sh.registrar_movimiento_finanzas(descripcion=desc, egreso=monto, categoria="Egreso")
+                    contexto = f"Registrado: {r1}"
+                except Exception as e:
+                    contexto = f"Error al registrar: {e}"
 
         # ── Balance / resumen ─────────────────────────────────────────────────
         elif any(w in task_lower for w in _BALANCE):
@@ -131,12 +138,14 @@ Respondé en español, de forma concisa y profesional."""
         else:
             prompt = task
 
-        result = _client.messages.create(
+        response = await call_with_retry(
+            _client.messages.create,
             model=self.model,
             max_tokens=1024,
             system=self.system_prompt(),
             messages=[{"role": "user", "content": prompt}],
-        ).content[0].text
+        )
+        result = safe_text(response.content)
 
         await self._emit(broadcast, "done", result[:100])
         return result
@@ -150,8 +159,9 @@ Respondé en español, de forma concisa y profesional."""
 
         await self._emit(broadcast, "thinking", "Clasificando acción...")
         try:
-            clasificacion = _client.messages.create(
-                model=self.model,
+            resp_cls = await call_with_retry(
+                _client.messages.create,
+                model="claude-haiku-4-5-20251001",  # Haiku para clasificación barata
                 max_tokens=10,
                 messages=[{
                     "role": "user",
@@ -160,7 +170,8 @@ Respondé en español, de forma concisa y profesional."""
                         f"¿Esta instrucción registra un ingreso o un egreso?\nTexto: {task}"
                     ),
                 }],
-            ).content[0].text.strip().lower()
+            )
+            clasificacion = safe_text(resp_cls.content).strip().lower()
         except Exception:
             return None
 

@@ -24,9 +24,25 @@ sys.modules.setdefault("google.oauth2.service_account", _mock_google.oauth2.serv
 sys.modules.setdefault("googleapiclient", MagicMock())
 sys.modules.setdefault("googleapiclient.discovery", MagicMock())
 
-# Mock de Anthropic SDK
+# Mock de Anthropic SDK — configurado para que messages.create() devuelva
+# el contenido del prompt como texto (echo), así los tests de lógica de negocio
+# pueden verificar qué contexto se generó sin depender de Claude real.
 _mock_anthropic = MagicMock()
 sys.modules.setdefault("anthropic", _mock_anthropic)
+
+def _echo_anthropic(*args, **kwargs):
+    """Claude mock que devuelve el contenido del último mensaje como respuesta."""
+    messages = kwargs.get("messages", args[1] if len(args) > 1 else [])
+    if messages and isinstance(messages[-1], dict):
+        content = messages[-1].get("content", "respuesta mock")
+    else:
+        content = "respuesta mock"
+    response = MagicMock()
+    response.content = [MagicMock(text=str(content)[:800])]
+    response.stop_reason = "end_turn"
+    return response
+
+_mock_anthropic.Anthropic.return_value.messages.create.side_effect = _echo_anthropic
 
 # Mock de aiosqlite
 _mock_aiosqlite = MagicMock()

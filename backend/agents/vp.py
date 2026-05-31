@@ -278,14 +278,24 @@ _NEGACIONES = {"no", "cancelá", "cancela", "pará", "para", "detené", "detene"
 
 
 def _es_confirmacion(msg: str) -> bool:
-    """Detecta si el mensaje es una confirmación de una acción pendiente."""
+    """
+    Detecta si el mensaje es una confirmación de una acción pendiente.
+    Usa word-boundary matching para evitar falsos positivos: "si" dentro de
+    "sistema", "diseño", "así" ya no matchea.
+    """
+    import re as _re
     m = msg.strip().lower().rstrip(".,!¡¿?")
-    return m in _CONFIRMACIONES or any(w in m for w in _CONFIRMACIONES)
+    if m in _CONFIRMACIONES:
+        return True
+    return any(_re.search(r'\b' + _re.escape(w) + r'\b', m) for w in _CONFIRMACIONES)
 
 
 def _es_negacion(msg: str) -> bool:
+    import re as _re
     m = msg.strip().lower().rstrip(".,!¡¿?")
-    return m in _NEGACIONES or any(w in m for w in _NEGACIONES)
+    if m in _NEGACIONES:
+        return True
+    return any(_re.search(r'\b' + _re.escape(w) + r'\b', m) for w in _NEGACIONES)
 
 
 def _hay_confirmacion_pendiente(history: list[dict] | None = None) -> bool:

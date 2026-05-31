@@ -243,15 +243,12 @@ async def get_logs(tenant_id: str = "", limit: int = 200, path: str = ""):
 
 # ── Diagnóstico del sistema ───────────────────────────────────────────────────
 
-@router.get("/diagnostico")
-async def get_diagnostico(pw: str = ""):
+@router.get("/diagnostico", dependencies=[Depends(_require_admin)])
+async def get_diagnostico():
     """
     Endpoint de diagnóstico para debugging en producción.
-    Muestra estado real de DB, Sheets y memoria por tenant.
+    Requiere JWT de admin (mismo Bearer token que el resto del panel).
     """
-    expected = os.getenv("ADMIN_PASSWORD", "")
-    if not expected or pw != expected:
-        raise HTTPException(status_code=401, detail="Password incorrecta")
 
     from db.models import DB_PATH
     import aiosqlite

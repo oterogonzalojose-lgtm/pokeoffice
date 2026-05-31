@@ -139,7 +139,8 @@ async def request_logger_middleware(request: Request, call_next):
         user_email = user.get("email", "")
         try:
             from db.admin_models import guardar_request_log
-            asyncio.create_task(guardar_request_log(
+            from agents.vp import _fire_and_track
+            _fire_and_track(guardar_request_log(
                 tenant_id=tenant_id, user_email=user_email,
                 method=request.method, path=path,
                 status_code=response.status_code, duration_ms=duration_ms,
@@ -340,8 +341,16 @@ async def vincular_planilla(req: VincularRequest, request: Request):
 
 
 @app.post("/planilla/actualizar-formulas")
-async def fix_formulas():
+async def fix_formulas(request: Request):
+    tenant_id = getattr(request.state, "user", {}).get("tenant_id", "")
     try:
+        if tenant_id:
+            from db.admin_models import get_tenant
+            from mcp.sheets_client import set_tenant_spreadsheet_id_ctx
+            tenant_data = await get_tenant(tenant_id)
+            sid = (tenant_data or {}).get("spreadsheet_id") or ""
+            if sid:
+                set_tenant_spreadsheet_id_ctx(sid)
         result = actualizar_formulas_planilla()
         return {"ok": True, "message": result}
     except Exception as e:

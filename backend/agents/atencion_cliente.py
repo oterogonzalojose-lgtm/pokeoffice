@@ -1,5 +1,6 @@
 import re
 from .base import BaseAgent, _client
+from .utils import call_with_retry, safe_text
 from mcp import sheets_client as sh
 
 
@@ -171,12 +172,14 @@ Respondé siempre en español, de forma directa y sin rodeos."""
         else:
             prompt = task
 
-        result = _client.messages.create(
+        response = await call_with_retry(
+            _client.messages.create,
             model=self.model,
             max_tokens=1024,
             system=self.system_prompt(),
             messages=[{"role": "user", "content": prompt}],
-        ).content[0].text
+        )
+        result = safe_text(response.content)
 
         await self._emit(broadcast, "done", result[:100])
         return result

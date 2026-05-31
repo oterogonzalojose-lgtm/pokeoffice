@@ -67,6 +67,8 @@ FIXES: dict[str, dict] = {
 
 async def run_fix(fix_id: str) -> dict:
     """Ejecuta un fix pre-definido para todos los tenants activos."""
+    import asyncio
+
     fix = FIXES.get(fix_id)
     if not fix:
         return {
@@ -87,7 +89,8 @@ async def run_fix(fix_id: str) -> dict:
             continue
         nombre = full.get("nombre_negocio") or full.get("email") or t["id"]
         try:
-            resultado = fix["funcion"](full)
+            # Ejecutar en thread pool para no bloquear el event loop con I/O síncrono de Sheets
+            resultado = await asyncio.to_thread(fix["funcion"], full)
             resultados.append({"tenant": nombre, "status": "ok", "resultado": resultado})
             log.info("fix %s — %s: OK", fix_id, nombre)
         except Exception as e:

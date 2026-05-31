@@ -11,6 +11,7 @@ import os
 import json
 import logging
 import contextvars
+import functools
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -52,21 +53,23 @@ def set_tenant_id_ctx(tid: str):
 
 # ── Credentials & config ──────────────────────────────────────────────────────
 
+@functools.lru_cache(maxsize=1)
 def _creds():
-    # Prioridad 1: JSON completo en variable de entorno (Railway / producción)
+    """Cachea las credenciales para evitar parsear el JSON en cada llamada."""
     json_str = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
     if json_str:
         info = json.loads(json_str)
         return service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
-    # Prioridad 2: archivo local (desarrollo)
     path = os.getenv("GOOGLE_DRIVE_CREDENTIALS_PATH", "./credentials.json")
     return service_account.Credentials.from_service_account_file(path, scopes=SCOPES)
 
 
+@functools.lru_cache(maxsize=1)
 def _sheets():
     return build("sheets", "v4", credentials=_creds())
 
 
+@functools.lru_cache(maxsize=1)
 def _drive():
     return build("drive", "v3", credentials=_creds())
 
@@ -304,7 +307,7 @@ def _write(svc, sid: str, rng: str, values: list):
 
 def _apply_formats(svc, sid: str):
     """Bold headers and color title rows."""
-    sheets_meta = _sheets().spreadsheets().get(spreadsheetId=sid).execute()
+    sheets_meta = svc.spreadsheets().get(spreadsheetId=sid).execute()
     sheet_ids = {s["properties"]["title"]: s["properties"]["sheetId"] for s in sheets_meta["sheets"]}
 
     requests = []

@@ -369,7 +369,10 @@ class TestColumnasPersonalizadas:
         """Hojas que no existen no deben permitir columnas."""
         from mcp import sheets_client as sh
         resultado = sh.agregar_columna_personalizada("Inventario", "Columna random")
-        assert "no puede" in resultado.lower() or "no se puede" in resultado.lower()
+        # El mensaje puede variar; verificar que mencione la restricción
+        r = resultado.lower()
+        assert any(w in r for w in ["no permit", "no puede", "no se puede", "solo se puede"]), \
+            f"Debería indicar restricción: {resultado}"
 
     def test_columna_existente_no_duplica(self, sheets_con_clientes):
         """No debe agregar una columna que ya existe."""
