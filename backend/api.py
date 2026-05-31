@@ -442,13 +442,22 @@ async def completar_onboarding(req: OnboardingRequest, request: Request):
 
 
 @app.get("/dashboard")
-async def dashboard():
+async def dashboard(request: Request):
     """KPIs financieros + stock bajo + últimos movimientos para el dashboard."""
+    tenant_id = getattr(request.state, "user", {}).get("tenant_id", "")
     try:
+        # Setear el spreadsheet_id del tenant antes de llamar a Sheets
+        if tenant_id:
+            from db.admin_models import get_tenant
+            from mcp.sheets_client import set_tenant_spreadsheet_id_ctx
+            tenant_data = await get_tenant(tenant_id)
+            sid = (tenant_data or {}).get("spreadsheet_id") or ""
+            if sid:
+                set_tenant_spreadsheet_id_ctx(sid)
         data = get_dashboard_data()
         return data
     except Exception as e:
-        log.error("dashboard: %s", e)
+        log.error("dashboard [%s]: %s", tenant_id, e)
         return {"error": str(e), "finanzas": {}, "movimientos": [], "stock_bajo": []}
 
 
