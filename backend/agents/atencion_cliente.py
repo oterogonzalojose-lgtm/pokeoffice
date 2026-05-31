@@ -55,21 +55,35 @@ Respondé siempre en español, de forma directa y sin rodeos."""
                     "Por favor indicá: nombre y apellido (obligatorio) + teléfono o email (al menos uno)."
                 )
             else:
-                # Verificar duplicado antes de registrar
+                # Verificar duplicado por nombre Y por teléfono antes de registrar
                 await self._emit(broadcast, "working", "Verificando si el cliente ya existe...")
-                query = f"{datos['nombre']} {datos['apellido']}".strip()
+                nombre_completo = f"{datos['nombre']} {datos['apellido']}".strip()
                 try:
-                    existentes = sh.buscar_cliente(query)
+                    existentes = sh.buscar_cliente(nombre_completo)
+                    # Si no encontró por nombre, buscar también por teléfono
+                    if not existentes and datos.get("telefono"):
+                        existentes = sh.buscar_cliente(datos["telefono"])
                 except Exception:
                     existentes = []
 
                 if existentes:
                     c = existentes[0]
-                    contexto = (
-                        f"El cliente '{datos['nombre']} {datos['apellido']}' ya existe en el sistema "
-                        f"(ID #{c['id']}, Tel: {c['telefono'] or 'sin tel'}, Email: {c['email'] or 'sin email'}). "
-                        f"No se creó un registro duplicado. ¿Querés actualizar sus datos?"
-                    )
+                    nombre_existente = f"{c['nombre']} {c['apellido']}".strip()
+                    if nombre_existente.lower() == nombre_completo.lower():
+                        # Mismo nombre — duplicado directo
+                        contexto = (
+                            f"El cliente '{nombre_completo}' ya existe en el sistema "
+                            f"(ID #{c['id']}, Tel: {c['telefono'] or 'sin tel'}, Email: {c['email'] or 'sin email'}). "
+                            f"No se registró de nuevo. ¿Querés actualizar algún dato?"
+                        )
+                    else:
+                        # Nombre diferente pero mismo teléfono — conflicto, preguntar al jefe
+                        contexto = (
+                            f"Ya hay un cliente registrado con el teléfono {datos['telefono']}: "
+                            f"'{nombre_existente}' (ID #{c['id']}). "
+                            f"¿Querés registrar a '{nombre_completo}' como cliente nuevo igualmente, "
+                            f"o actualizar los datos del registro existente?"
+                        )
                 else:
                     await self._emit(broadcast, "working", "Registrando cliente en Sheets...")
                     try:
