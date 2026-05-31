@@ -243,17 +243,19 @@ async def get_diagnostico(pw: str = ""):
     except Exception as e:
         resultado["platform_events_error"] = str(e)
 
-    # Info por tenant
+    # Info por tenant — usar get_tenant (SELECT *) para incluir spreadsheet_id
     try:
         tenants = await listar_tenants()
         for t in tenants:
             tid = t["id"]
+            # listar_tenants() no incluye spreadsheet_id en su SELECT — leer con get_tenant
+            t_full = await get_tenant(tid) or {}
             info: dict = {
                 "id": tid,
                 "email": t.get("email"),
                 "nombre_negocio": t.get("nombre_negocio"),
                 "activo": t.get("activo"),
-                "spreadsheet_id_db": t.get("spreadsheet_id"),
+                "spreadsheet_id_db": t_full.get("spreadsheet_id"),
                 "memoria_count": t.get("memoria_count", 0),
                 "conv_count": t.get("conv_count", 0),
                 "sheets_ok": None,
@@ -261,7 +263,7 @@ async def get_diagnostico(pw: str = ""):
             }
 
             # Probar conexión a sheets si tiene ID configurado
-            sid = t.get("spreadsheet_id") or ""
+            sid = t_full.get("spreadsheet_id") or ""
             if sid:
                 try:
                     from mcp.sheets_client import _sheets
