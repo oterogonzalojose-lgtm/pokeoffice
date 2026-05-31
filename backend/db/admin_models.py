@@ -206,6 +206,18 @@ async def get_metricas_tenant(tid: str) -> dict:
 async def init_feedback_table():
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
+            CREATE TABLE IF NOT EXISTS request_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT DEFAULT (datetime('now')),
+                tenant_id TEXT DEFAULT '',
+                user_email TEXT DEFAULT '',
+                method TEXT NOT NULL DEFAULT '',
+                path TEXT NOT NULL DEFAULT '',
+                status_code INTEGER DEFAULT 0,
+                duration_ms INTEGER DEFAULT 0
+            )
+        """)
+        await db.execute("""
             CREATE TABLE IF NOT EXISTS feedback (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 tenant_id TEXT DEFAULT '',
@@ -274,6 +286,46 @@ async def actualizar_estado_event(eid: int, estado: str):
             "UPDATE platform_events SET estado = ? WHERE id = ?", (estado, eid)
         )
         await db.commit()
+
+
+async def guardar_request_log(tenant_id: str, user_email: str, method: str,
+                               path: str, status_code: int, duration_ms: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO request_logs (tenant_id, user_email, method, path, status_code, duration_ms) "
+            "VALUES (?,?,?,?,?,?)",
+            (tenant_id, user_email, method, path, status_code, duration_ms),
+        )
+        # Mantener solo los últimos 5000 registros para no inflar la DB
+        await db.execute(
+            "DELETE FROM request_logs WHERE id NOT IN "
+            "(SELECT id FROM request_logs ORDER BY id DESC LIMIT 5000)"
+        )
+        await db.commit()
+
+
+async def listar_request_logs(tenant_id: str = "", limit: int = 200,
+                               path_contains: str = "") -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        conditions, params = [], []
+        if tenant_id:
+            conditions.append("tenant_id = ?")
+            params.append(tenant_id)
+        if path_contains:
+            conditions.append("path LIKE ?")
+            params.append(f"%{path_contains}%")
+        where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        params.append(limit)
+        cursor = await db.execute(
+            f"SELECT rl.*, t.nombre_negocio "
+            f"FROM request_logs rl "
+            f"LEFT JOIN tenants t ON rl.tenant_id = t.id "
+            f"{where} ORDER BY rl.id DESC LIMIT ?",
+            params,
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
 
 
 async def listar_feedback(solo_no_leido: bool = False) -> list[dict]:

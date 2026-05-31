@@ -18,6 +18,7 @@ from db.admin_models import (
     listar_feedback, marcar_feedback_leido,
     listar_solicitudes, atender_solicitud,
     listar_platform_events, actualizar_estado_event,
+    listar_request_logs,
 )
 
 router   = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -197,6 +198,15 @@ async def crear_planilla_tenant(tid: str):
                 "url": f"https://docs.google.com/spreadsheets/d/{sid}"}
     except Exception as e:
         raise HTTPException(500, f"Error al crear planilla: {e}")
+
+
+# ── Request Logs ─────────────────────────────────────────────────────────────
+
+@router.get("/logs", dependencies=[Depends(_require_admin)])
+async def get_logs(tenant_id: str = "", limit: int = 200, path: str = ""):
+    """Trazabilidad de requests HTTP por tenant."""
+    return await listar_request_logs(tenant_id=tenant_id, limit=min(limit, 500),
+                                     path_contains=path)
 
 
 # ── Diagnóstico del sistema ───────────────────────────────────────────────────

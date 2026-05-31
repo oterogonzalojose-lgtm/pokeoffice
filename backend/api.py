@@ -2,6 +2,7 @@ import os
 import json
 import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -118,6 +119,36 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Pokeoffice API", lifespan=lifespan)
 app.include_router(admin_router)
 app.include_router(auth_router)
+
+# ── Middleware de logging de requests ─────────────────────────────────────────
+# Debe ir ANTES del auth middleware para ser el wrapper más externo.
+# Lee request.state.user DESPUÉS de call_next (ya lo setea el auth middleware).
+
+_LOG_SKIP_PREFIXES = ("/assets", "/sprites", "/ws", "/health")
+
+@app.middleware("http")
+async def request_logger_middleware(request: Request, call_next):
+    start = time.monotonic()
+    response = await call_next(request)
+    duration_ms = int((time.monotonic() - start) * 1000)
+
+    path = request.url.path
+    if not any(path.startswith(p) for p in _LOG_SKIP_PREFIXES):
+        user = getattr(request.state, "user", {}) or {}
+        tenant_id  = user.get("tenant_id", "")
+        user_email = user.get("email", "")
+        try:
+            from db.admin_models import guardar_request_log
+            asyncio.create_task(guardar_request_log(
+                tenant_id=tenant_id, user_email=user_email,
+                method=request.method, path=path,
+                status_code=response.status_code, duration_ms=duration_ms,
+            ))
+        except Exception:
+            pass
+
+    return response
+
 
 # ── Rutas y prefijos que no requieren auth de usuario ─────────────────────────
 _PUBLIC_EXACT    = {"/health", "/ws", "/auth/solicitar", "/auth/verificar"}

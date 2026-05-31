@@ -367,6 +367,17 @@ export default function AdminPanel({ token, onLogout }) {
     if (data) setSolicitudes(Array.isArray(data) ? data : [])
   }, [adminFetch])
 
+  const [logs, setLogs]           = useState([])
+  const [logFilter, setLogFilter] = useState({ tenant_id: '', path: '' })
+  const loadLogs = useCallback(async (filter = logFilter) => {
+    const params = new URLSearchParams()
+    if (filter.tenant_id) params.set('tenant_id', filter.tenant_id)
+    if (filter.path)      params.set('path', filter.path)
+    params.set('limit', '300')
+    const data = await adminFetch(`/api/admin/logs?${params}`)
+    if (data) setLogs(Array.isArray(data) ? data : [])
+  }, [adminFetch, logFilter])
+
   const [platformEvents, setPlatformEvents] = useState([])
   const [evFilter, setEvFilter] = useState({ tipo: '', estado: 'pendiente' })
   const loadPlatformEvents = useCallback(async (filter = evFilter) => {
@@ -387,9 +398,10 @@ export default function AdminPanel({ token, onLogout }) {
     const interval = setInterval(loadTenants, 30000)
     return () => clearInterval(interval)
   }, [loadTenants])
-  useEffect(() => { if (tab === 'feedback')    loadFeedback() },                         [tab, loadFeedback])
-  useEffect(() => { if (tab === 'solicitudes') loadSolicitudes() },                       [tab, loadSolicitudes])
-  useEffect(() => { if (tab === 'plataforma')  loadPlatformEvents(evFilter) },            [tab])  // eslint-disable-line
+  useEffect(() => { if (tab === 'feedback')    loadFeedback() },           [tab, loadFeedback])
+  useEffect(() => { if (tab === 'solicitudes') loadSolicitudes() },         [tab, loadSolicitudes])
+  useEffect(() => { if (tab === 'plataforma')  loadPlatformEvents(evFilter) }, [tab])  // eslint-disable-line
+  useEffect(() => { if (tab === 'logs')        loadLogs(logFilter) },      [tab])  // eslint-disable-line
 
   async function handleCreateTenant(e) {
     e.preventDefault()
@@ -434,7 +446,7 @@ export default function AdminPanel({ token, onLogout }) {
 
       {/* Tabs */}
       <div className="border-b border-[#1e1e3a] px-6 flex gap-1 pt-2">
-        {[['tenants','🏠 Tenants'], ['solicitudes','📬 Solicitudes'], ['feedback','💬 Feedback'], ['plataforma','⚙️ Plataforma']].map(([k, l]) => (
+        {[['tenants','🏠 Tenants'], ['solicitudes','📬 Solicitudes'], ['logs','📋 Logs'], ['feedback','💬 Feedback'], ['plataforma','⚙️ Plataforma'], ['docs','📖 Docs']].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`font-mono text-xs px-3 py-1.5 rounded-t transition-colors ${tab === k ? 'bg-[#1e1e3a] text-white' : 'text-gray-500 hover:text-gray-300'}`}>
             {l}
@@ -646,6 +658,65 @@ export default function AdminPanel({ token, onLogout }) {
           </div>
         )}
 
+        {/* Logs tab */}
+        {tab === 'logs' && (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h2 className="font-mono text-sm font-bold text-white uppercase tracking-widest">Request Logs</h2>
+              <div className="flex items-center gap-2 flex-wrap">
+                <select value={logFilter.tenant_id}
+                  onChange={e => { const f = { ...logFilter, tenant_id: e.target.value }; setLogFilter(f); loadLogs(f) }}
+                  className="bg-[#0a0a18] border border-[#1e1e3a] rounded px-2 py-1 font-mono text-xs text-gray-300 focus:outline-none">
+                  <option value="">Todos los tenants</option>
+                  {tenants.map(t => (
+                    <option key={t.id} value={t.id}>{t.nombre_negocio || t.email}</option>
+                  ))}
+                </select>
+                <input value={logFilter.path}
+                  onChange={e => setLogFilter(f => ({ ...f, path: e.target.value }))}
+                  onKeyDown={e => e.key === 'Enter' && loadLogs(logFilter)}
+                  placeholder="filtrar por path..."
+                  className="bg-[#0a0a18] border border-[#1e1e3a] rounded px-2 py-1 font-mono text-xs text-gray-300 focus:outline-none w-40" />
+                <button onClick={() => loadLogs(logFilter)}
+                  className="text-[10px] font-mono text-blue-400 hover:text-blue-300">↻</button>
+              </div>
+            </div>
+
+            <div className="bg-[#07070f] border border-[#1e1e3a] rounded overflow-x-auto">
+              <table className="w-full min-w-[700px]">
+                <thead>
+                  <tr className="border-b border-[#1e1e3a]">
+                    {['Timestamp', 'Tenant', 'Usuario', 'Método', 'Path', 'Status', 'ms'].map(h => (
+                      <th key={h} className="px-3 py-2 text-left font-mono text-[10px] text-gray-500 uppercase tracking-widest whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {logs.length === 0
+                    ? <tr><td colSpan={7} className="px-3 py-6 text-center font-mono text-xs text-gray-600">Sin registros aún. Los logs aparecen con el próximo request.</td></tr>
+                    : logs.map(l => {
+                      const status = l.status_code || 0
+                      const statusColor = status >= 500 ? 'text-red-400' : status >= 400 ? 'text-yellow-400' : status >= 200 ? 'text-green-400' : 'text-gray-500'
+                      const methodColor = { GET: 'text-blue-400', POST: 'text-green-400', PATCH: 'text-yellow-400', DELETE: 'text-red-400' }[l.method] || 'text-gray-400'
+                      return (
+                        <tr key={l.id} className="border-b border-[#0f0f1f] hover:bg-[#0d0d20] transition-colors">
+                          <td className="px-3 py-1.5 font-mono text-[10px] text-gray-500 whitespace-nowrap">{l.created_at?.slice(5, 19)}</td>
+                          <td className="px-3 py-1.5 font-mono text-[10px] text-gray-400 whitespace-nowrap">{l.nombre_negocio || l.tenant_id?.slice(0,8) || '—'}</td>
+                          <td className="px-3 py-1.5 font-mono text-[10px] text-gray-500 whitespace-nowrap truncate max-w-[120px]">{l.user_email || '—'}</td>
+                          <td className={`px-3 py-1.5 font-mono text-[10px] font-bold whitespace-nowrap ${methodColor}`}>{l.method}</td>
+                          <td className="px-3 py-1.5 font-mono text-[10px] text-gray-300 max-w-[200px] truncate">{l.path}</td>
+                          <td className={`px-3 py-1.5 font-mono text-[10px] font-bold whitespace-nowrap ${statusColor}`}>{status}</td>
+                          <td className="px-3 py-1.5 font-mono text-[10px] text-gray-500 whitespace-nowrap">{l.duration_ms}</td>
+                        </tr>
+                      )
+                    })
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* Feedback tab */}
         {tab === 'feedback' && (
           <div className="flex flex-col gap-3">
@@ -672,6 +743,94 @@ export default function AdminPanel({ token, onLogout }) {
             }
           </div>
         )}
+        {/* Docs tab */}
+        {tab === 'docs' && (
+          <div className="flex flex-col gap-6 max-w-3xl">
+            <h2 className="font-mono text-sm font-bold text-white uppercase tracking-widest">Documentación interna</h2>
+
+            {[
+              {
+                title: '🤖 Agentes',
+                rows: [
+                  ['VP / Jefe de Gabinete', 'Orquestador. Recibe instrucciones, delega a agentes, nunca expone errores técnicos al jefe.'],
+                  ['Recepcionista', 'Alta y búsqueda de clientes en Google Sheets (tab Clientes).'],
+                  ['Contador', 'Ingresos, egresos, balances. Escribe en tab Finanzas.'],
+                  ['Gestor de Proveedores', 'Stock, precios, órdenes de compra. Escribe en tab Stock.'],
+                  ['Marketing', 'Posts, copys, newsletters. Solo genera texto, no escribe en Sheets.'],
+                  ['Programador', 'Diagnóstico técnico interno. Invisible al cliente.'],
+                ],
+              },
+              {
+                title: '📋 Tablas SQLite',
+                rows: [
+                  ['tenants', 'id, email, nombre_negocio, plan, activo, spreadsheet_id'],
+                  ['users', 'id, tenant_id, email, nombre, activo, last_login'],
+                  ['invitaciones', 'id, tenant_id, email, codigo (6 dígitos), usado, expires_at (24h)'],
+                  ['conversations', 'id, tenant_id, user_email, user_message, vp_response, events'],
+                  ['vp_memoria', 'id, tenant_id, user_email, tipo, aprendizaje, relevancia, usos'],
+                  ['configuracion', '(clave, tenant_id) PK compuesta, valor'],
+                  ['recordatorios', 'id, tenant_id, texto, tipo, completado'],
+                  ['platform_events', 'id, tenant_id, tipo (fix|mejora), titulo, descripcion, estado'],
+                  ['request_logs', 'id, tenant_id, user_email, method, path, status_code, duration_ms'],
+                ],
+              },
+              {
+                title: '🔌 API Admin endpoints',
+                rows: [
+                  ['GET /api/admin/tenants', 'Lista todos los tenants'],
+                  ['POST /api/admin/tenants', 'Crear tenant { email, nombre_negocio, plan }'],
+                  ['GET /api/admin/tenants/:id', 'Detalle: usuarios, invitaciones, métricas, spreadsheet'],
+                  ['POST /api/admin/tenants/:id/invite', 'Generar código invitación (6 dígitos, 24h)'],
+                  ['POST /api/admin/tenants/:id/vincular-planilla', 'Linkear Google Sheet al tenant'],
+                  ['POST /api/admin/tenants/:id/crear-planilla', 'Crear sheet nuevo desde admin'],
+                  ['GET /api/admin/tenants/:id/memoria', 'VP Memoria del tenant'],
+                  ['GET /api/admin/logs', 'Request logs — ?tenant_id=&path=&limit='],
+                  ['GET /api/admin/solicitudes', 'Solicitudes de registro pendientes'],
+                  ['GET /api/admin/platform-events', 'Eventos Master DEV — ?tipo=fix|mejora&estado='],
+                  ['PATCH /api/admin/platform-events/:id/estado', 'Cambiar estado del evento'],
+                  ['GET /api/admin/diagnostico?pw=', 'Diagnóstico completo del sistema'],
+                ],
+              },
+              {
+                title: '🔐 Auth & seguridad',
+                rows: [
+                  ['JWT usuario', '30 días — payload: role=user, user_id, tenant_id, email'],
+                  ['JWT admin', 'Sin expiración — payload: role=admin. Se invalida cambiando ADMIN_SECRET'],
+                  ['WebSocket', 'Aislado por tenant — token en query param ?token=. Sin token → tenant_id vacío'],
+                  ['Límite usuarios', 'Máximo 2 usuarios activos por tenant (plan starter)'],
+                  ['Rutas públicas', '/health, /ws, /auth/solicitar, /auth/verificar, /api/admin/*, /assets/*, /sprites/*'],
+                ],
+              },
+              {
+                title: '⚙️ Variables Railway',
+                rows: [
+                  ['ANTHROPIC_API_KEY', 'Clave de Anthropic — modelos: sonnet-4-6 (VP/agentes), haiku-4-5 (memoria/master_dev)'],
+                  ['ADMIN_PASSWORD', 'Contraseña del panel /admin'],
+                  ['ADMIN_SECRET', 'Secret JWT admin — recomendado ≥32 chars'],
+                  ['GOOGLE_SERVICE_ACCOUNT_JSON', 'JSON completo de la service account de Google'],
+                  ['DATA_DIR', 'Seteado en Dockerfile como /data — no requiere variable manual'],
+                ],
+              },
+            ].map(({ title, rows }) => (
+              <div key={title} className="bg-[#07070f] border border-[#1e1e3a] rounded overflow-hidden">
+                <div className="px-4 py-2 border-b border-[#1e1e3a]">
+                  <p className="font-mono text-xs font-bold text-white">{title}</p>
+                </div>
+                <table className="w-full">
+                  <tbody>
+                    {rows.map(([k, v], i) => (
+                      <tr key={i} className="border-b border-[#0f0f1f] last:border-0">
+                        <td className="px-4 py-2 font-mono text-xs text-blue-300 whitespace-nowrap align-top w-56">{k}</td>
+                        <td className="px-4 py-2 font-mono text-xs text-gray-400">{v}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+        )}
+
       </main>
     </div>
   )
