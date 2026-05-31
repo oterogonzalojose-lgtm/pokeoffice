@@ -12,7 +12,7 @@ class ProgramadorAgent(BaseAgent):
 ARQUITECTURA DEL SISTEMA (contexto para diagnóstico):
 - Backend: Python/FastAPI + Claude API (Anthropic) + Google Sheets via service account
 - Los agentes usan keyword detection para detectar intents antes de llamar a Claude
-- Google Sheets es la base de datos principal (Clientes, Cashflow, Libro Contable, Stock)
+- Google Sheets es la base de datos principal (Clientes, Finanzas, Stock)
 - El VP orquesta con tool_use de Claude
 
 CAUSAS FRECUENTES DE ERRORES:
@@ -25,7 +25,12 @@ FLUJO DE DIAGNÓSTICO:
 1. Identificar si es error de API, de Sheets, de prompt o de datos
 2. Verificar el sistema si es necesario (usar herramientas disponibles)
 3. Proponer la acción correctiva más simple posible
-4. Indicar si el problema es temporal (reintentable) o requiere configuración
+4. Si el problema requiere intervención humana o cambio de código → usar escalar_problema
+
+CUÁNDO ESCALAR:
+- Falla de conexión total a Sheets (no temporal)
+- Error que impide que el usuario use el sistema
+- Bug de código (no es algo configurable desde el panel)
 
 FORMATO DE RESPUESTA:
 🔍 Diagnóstico: [qué está fallando]
@@ -47,21 +52,31 @@ Respondé de forma técnica pero comprensible, en español."""
                 "description": "Lista las hojas disponibles en la planilla maestra para diagnóstico.",
                 "input_schema": {"type": "object", "properties": {}},
             },
+            {
+                "name": "escalar_problema",
+                "description": (
+                    "Escala un problema técnico que no se puede resolver automáticamente al equipo admin de Pokeoffice. "
+                    "Usá cuando el error requiere intervención humana o cambio de código. "
+                    "El admin verá el reporte en el panel de plataforma y podrá responder."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "titulo":      {"type": "string", "description": "Título del problema (max 70 chars)"},
+                        "descripcion": {"type": "string", "description": "Qué falló técnicamente. 1-2 oraciones."},
+                        "causa":       {"type": "string", "description": "Por qué está fallando (diagnóstico)."},
+                        "prioridad":   {"type": "string", "enum": ["baja", "media", "alta"], "description": "Urgencia del problema"},
+                    },
+                    "required": ["titulo", "descripcion", "prioridad"],
+                },
+            },
         ]
 
     def execute_tool(self, name: str, inputs: dict) -> str:
         if name == "verificar_planilla":
             try:
                 sid = sh.get_spreadsheet_id()
-                from google.oauth2 import service_account
-                from googleapiclient.discovery import build
-                import os
-                creds_path = os.getenv("GOOGLE_DRIVE_CREDENTIALS_PATH", "./credentials.json")
-                creds = service_account.Credentials.from_service_account_file(
-                    creds_path,
-                    scopes=["https://www.googleapis.com/auth/spreadsheets"]
-                )
-                svc = build("sheets", "v4", credentials=creds)
+                svc = sh._sheets()
                 meta = svc.spreadsheets().get(spreadsheetId=sid).execute()
                 sheets = [s["properties"]["title"] for s in meta["sheets"]]
                 return f"Planilla accesible. ID: {sid}. Hojas: {', '.join(sheets)}"
@@ -70,16 +85,8 @@ Respondé de forma técnica pero comprensible, en español."""
 
         if name == "listar_hojas":
             try:
-                from google.oauth2 import service_account
-                from googleapiclient.discovery import build
-                import os
                 sid = sh.get_spreadsheet_id()
-                creds_path = os.getenv("GOOGLE_DRIVE_CREDENTIALS_PATH", "./credentials.json")
-                creds = service_account.Credentials.from_service_account_file(
-                    creds_path,
-                    scopes=["https://www.googleapis.com/auth/spreadsheets"]
-                )
-                svc = build("sheets", "v4", credentials=creds)
+                svc = sh._sheets()
                 meta = svc.spreadsheets().get(spreadsheetId=sid).execute()
                 info = []
                 for s in meta["sheets"]:
@@ -88,5 +95,34 @@ Respondé de forma técnica pero comprensible, en español."""
                 return "Hojas disponibles:\n" + "\n".join(info)
             except Exception as e:
                 return f"Error: {e}"
+
+        if name == "escalar_problema":
+            import sqlite3
+            from db.models import DB_PATH
+            from mcp.sheets_client import _tenant_id_ctx
+
+            tenant_id    = _tenant_id_ctx.get()
+            titulo       = inputs.get("titulo", "Problema sin título")[:120]
+            descripcion  = inputs.get("descripcion", "")
+            causa        = inputs.get("causa", "")
+            prioridad    = inputs.get("prioridad", "media")
+            aplicabilidad = {"alta": 9, "media": 6, "baja": 3}.get(prioridad, 6)
+
+            try:
+                con = sqlite3.connect(str(DB_PATH))
+                con.execute(
+                    "INSERT INTO platform_events "
+                    "(tenant_id, tipo, titulo, descripcion, razonamiento, aplicabilidad) "
+                    "VALUES (?,?,?,?,?,?)",
+                    (tenant_id, "escalacion", titulo, descripcion, causa, aplicabilidad),
+                )
+                con.commit()
+                con.close()
+                return (
+                    f"✅ Escalación registrada: '{titulo}' (prioridad {prioridad}). "
+                    f"El equipo admin de Pokeoffice fue notificado y responderá desde el panel."
+                )
+            except Exception as e:
+                return f"Error al registrar la escalación: {e}"
 
         return f"Herramienta '{name}' no reconocida."

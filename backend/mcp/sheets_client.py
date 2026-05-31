@@ -34,10 +34,20 @@ _tenant_sid_ctx: contextvars.ContextVar[str] = contextvars.ContextVar(
     "tenant_spreadsheet_id", default=""
 )
 
+# ContextVar para pasar el tenant_id activo (usado por escalar_problema y otros agentes)
+_tenant_id_ctx: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "tenant_id", default=""
+)
+
 
 def set_tenant_spreadsheet_id_ctx(sid: str):
     """Llamar al inicio de cada request con el spreadsheet_id del tenant."""
     _tenant_sid_ctx.set(sid)
+
+
+def set_tenant_id_ctx(tid: str):
+    """Llamar al inicio de cada request con el tenant_id activo."""
+    _tenant_id_ctx.set(tid)
 
 
 # ── Credentials & config ──────────────────────────────────────────────────────

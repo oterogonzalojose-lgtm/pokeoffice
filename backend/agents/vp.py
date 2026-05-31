@@ -14,7 +14,7 @@ from .programador import ProgramadorAgent
 from .memoria_vp import procesar_post_conversacion, construir_contexto_memoria
 from db.models import obtener_memoria, get_all_config
 from mcp import sheets_client as sh
-from mcp.sheets_client import set_tenant_spreadsheet_id_ctx
+from mcp.sheets_client import set_tenant_spreadsheet_id_ctx, set_tenant_id_ctx
 
 log = logging.getLogger("pokeoffice")
 
@@ -254,9 +254,10 @@ async def run_vp(user_message: str, broadcast: Broadcaster = None,
     history_key = (tenant_id, user_email)
     history = _HISTORY.setdefault(history_key, [])
 
-    # Setear el spreadsheet_id del tenant en el ContextVar para que todos los
+    # Setear el tenant_id y spreadsheet_id en ContextVars para que todos los
     # agentes usen la planilla correcta sin necesidad de pasar el ID explícitamente.
     if tenant_id:
+        set_tenant_id_ctx(tenant_id)
         try:
             from db.admin_models import get_tenant
             tenant_data = await get_tenant(tenant_id)

@@ -237,9 +237,15 @@ async def init_feedback_table():
                 razonamiento TEXT DEFAULT '',
                 aplicabilidad INTEGER DEFAULT 5,
                 estado TEXT NOT NULL DEFAULT 'pendiente',
+                respuesta_admin TEXT DEFAULT '',
                 created_at TEXT DEFAULT (datetime('now'))
             )
         """)
+        # Migración segura: agrega la columna si la tabla ya existe sin ella
+        try:
+            await db.execute("ALTER TABLE platform_events ADD COLUMN respuesta_admin TEXT DEFAULT ''")
+        except Exception:
+            pass  # columna ya existe
         await db.commit()
 
 
@@ -284,6 +290,15 @@ async def actualizar_estado_event(eid: int, estado: str):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             "UPDATE platform_events SET estado = ? WHERE id = ?", (estado, eid)
+        )
+        await db.commit()
+
+
+async def responder_platform_event(eid: int, respuesta: str, nuevo_estado: str = "en_desarrollo"):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE platform_events SET respuesta_admin = ?, estado = ? WHERE id = ?",
+            (respuesta.strip(), nuevo_estado, eid),
         )
         await db.commit()
 

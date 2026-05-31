@@ -145,7 +145,7 @@ Respondé siempre en español, de forma directa y sin rodeos."""
         # Nombre — busca después de "cliente" (con prefijos opcionales como "al", "nuevo", "de")
         # El prefijo es NO capturante para evitar capturar "cliente" como nombre.
         m = re.search(
-            r"(?:(?:al|nuevo|del?|para)\s+)?cliente\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)*)",
+            r"(?:(?:al|nuevo|del?|para)\s+)?cliente:?\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)*)",
             task, re.IGNORECASE
         )
         if not m:

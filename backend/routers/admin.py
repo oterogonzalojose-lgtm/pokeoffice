@@ -17,7 +17,7 @@ from db.admin_models import (
     get_vp_memoria_tenant, get_metricas_tenant,
     listar_feedback, marcar_feedback_leido,
     listar_solicitudes, atender_solicitud,
-    listar_platform_events, actualizar_estado_event,
+    listar_platform_events, actualizar_estado_event, responder_platform_event,
     listar_request_logs,
 )
 
@@ -178,6 +178,21 @@ async def patch_platform_event_estado(eid: int, estado: str):
     if estado not in ESTADOS_VALIDOS:
         raise HTTPException(400, f"Estado inválido. Opciones: {ESTADOS_VALIDOS}")
     await actualizar_estado_event(eid, estado)
+    return {"ok": True}
+
+
+class RespuestaEventRequest(BaseModel):
+    respuesta:    str
+    nuevo_estado: str = "en_desarrollo"
+
+
+@router.patch("/platform-events/{eid}/responder", dependencies=[Depends(_require_admin)])
+async def patch_responder_event(eid: int, req: RespuestaEventRequest):
+    if req.nuevo_estado not in ESTADOS_VALIDOS:
+        raise HTTPException(400, f"Estado inválido. Opciones: {ESTADOS_VALIDOS}")
+    if not req.respuesta.strip():
+        raise HTTPException(400, "La respuesta no puede estar vacía")
+    await responder_platform_event(eid, req.respuesta, req.nuevo_estado)
     return {"ok": True}
 
 

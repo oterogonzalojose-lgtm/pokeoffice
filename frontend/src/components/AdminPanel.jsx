@@ -380,6 +380,7 @@ export default function AdminPanel({ token, onLogout }) {
 
   const [platformEvents, setPlatformEvents] = useState([])
   const [evFilter, setEvFilter] = useState({ tipo: '', estado: 'pendiente' })
+  const [respuestaForm, setRespuestaForm] = useState({})   // { [eid]: string }
   const loadPlatformEvents = useCallback(async (filter = evFilter) => {
     const params = new URLSearchParams()
     if (filter.tipo)   params.set('tipo',   filter.tipo)
@@ -390,6 +391,18 @@ export default function AdminPanel({ token, onLogout }) {
 
   async function cambiarEstadoEvent(eid, estado) {
     await adminFetch(`/api/admin/platform-events/${eid}/estado?estado=${estado}`, { method: 'PATCH' })
+    loadPlatformEvents()
+  }
+
+  async function responderEvent(eid, nuevo_estado) {
+    const respuesta = respuestaForm[eid] || ''
+    if (!respuesta.trim()) return
+    await adminFetch(`/api/admin/platform-events/${eid}/responder`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ respuesta, nuevo_estado }),
+    })
+    setRespuestaForm(prev => ({ ...prev, [eid]: '' }))
     loadPlatformEvents()
   }
 
@@ -566,6 +579,7 @@ export default function AdminPanel({ token, onLogout }) {
                   <option value="">Todos los tipos</option>
                   <option value="fix">Fix</option>
                   <option value="mejora">Mejora</option>
+                  <option value="escalacion">Escalación</option>
                 </select>
                 {/* Filtro estado */}
                 <select value={evFilter.estado}
@@ -587,17 +601,19 @@ export default function AdminPanel({ token, onLogout }) {
               : platformEvents.map(ev => (
                 <div key={ev.id}
                   className={`bg-[#07070f] border rounded p-4 flex flex-col gap-2 ${
-                    ev.tipo === 'fix' ? 'border-red-900' : 'border-blue-900'
+                    ev.tipo === 'fix' ? 'border-red-900'
+                    : ev.tipo === 'escalacion' ? 'border-orange-900'
+                    : 'border-blue-900'
                   }`}>
                   {/* Header */}
                   <div className="flex items-start gap-2 justify-between">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`font-mono text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
-                        ev.tipo === 'fix'
-                          ? 'bg-red-900 text-red-300'
-                          : 'bg-blue-900 text-blue-300'
+                        ev.tipo === 'fix' ? 'bg-red-900 text-red-300'
+                        : ev.tipo === 'escalacion' ? 'bg-orange-900 text-orange-300'
+                        : 'bg-blue-900 text-blue-300'
                       }`}>
-                        {ev.tipo}
+                        {ev.tipo === 'escalacion' ? '🚨 escalación' : ev.tipo}
                       </span>
                       <span className="font-mono text-sm text-white font-bold">{ev.titulo}</span>
                     </div>
@@ -605,7 +621,7 @@ export default function AdminPanel({ token, onLogout }) {
                     <div className="flex items-center gap-1.5 shrink-0">
                       <span className="font-mono text-[10px] text-gray-500">Aplicabilidad</span>
                       <div className="w-16 bg-[#1e1e3a] rounded-full h-1.5">
-                        <div className={`h-1.5 rounded-full ${ev.tipo === 'fix' ? 'bg-red-500' : 'bg-blue-500'}`}
+                        <div className={`h-1.5 rounded-full ${ev.tipo === 'fix' ? 'bg-red-500' : ev.tipo === 'escalacion' ? 'bg-orange-500' : 'bg-blue-500'}`}
                           style={{ width: `${(ev.aplicabilidad / 10) * 100}%` }} />
                       </div>
                       <span className="font-mono text-[10px] text-gray-400">{ev.aplicabilidad}/10</span>
@@ -620,6 +636,41 @@ export default function AdminPanel({ token, onLogout }) {
                     <p className="font-mono text-[10px] text-gray-500 italic border-l border-[#2a2a4a] pl-2">
                       {ev.razonamiento}
                     </p>
+                  )}
+
+                  {/* Respuesta admin existente */}
+                  {ev.respuesta_admin && (
+                    <div className="bg-[#0a1a0a] border border-green-900 rounded p-2 flex flex-col gap-1">
+                      <span className="font-mono text-[10px] text-green-500 uppercase tracking-wider">Respuesta Admin</span>
+                      <p className="font-mono text-xs text-green-300">{ev.respuesta_admin}</p>
+                    </div>
+                  )}
+
+                  {/* Formulario de respuesta (solo si no hay respuesta aún o es escalacion) */}
+                  {(ev.tipo === 'escalacion' || !ev.respuesta_admin) && ev.estado !== 'implementado' && ev.estado !== 'descartado' && (
+                    <div className="flex flex-col gap-1 mt-1">
+                      <textarea
+                        value={respuestaForm[ev.id] || ''}
+                        onChange={e => setRespuestaForm(prev => ({ ...prev, [ev.id]: e.target.value }))}
+                        placeholder="Escribir respuesta / decisión del admin..."
+                        rows={2}
+                        className="bg-[#0a0a18] border border-[#2a2a4a] rounded px-2 py-1 font-mono text-xs text-gray-300 focus:outline-none resize-none w-full"
+                      />
+                      <div className="flex gap-1 justify-end">
+                        {[
+                          ['en_desarrollo', 'En dev', 'text-yellow-400 border-yellow-900'],
+                          ['implementado',  'Implementado', 'text-green-400 border-green-900'],
+                          ['descartado',    'Descartar', 'text-red-400 border-red-900'],
+                        ].map(([st, label, cls]) => (
+                          <button key={st}
+                            onClick={() => responderEvent(ev.id, st)}
+                            disabled={!(respuestaForm[ev.id] || '').trim()}
+                            className={`font-mono text-[10px] px-2 py-1 rounded border ${cls} disabled:opacity-30 transition-opacity`}>
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   )}
 
                   {/* Footer */}
