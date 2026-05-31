@@ -239,7 +239,7 @@ DB:         SQLite en /data/pokeoffice.db
 
 ## 12. PENDIENTES ACTIVOS
 
-- [ ] `get_dashboard_data()` en sheets_client.py aún usa config global, no ContextVar. Rompe en multi-tenant.
+- [x] `get_dashboard_data()` — RESUELTO: GET /dashboard ahora setea ContextVar antes de llamar a Sheets.
 - [ ] Resend: envío automático de códigos de invitación por email.
 - [ ] Alerta de stock: `job_alerta_stock()` es un TODO sin implementar.
 - [ ] WhatsApp / Email para mensajes reales a clientes del emprendedor.
