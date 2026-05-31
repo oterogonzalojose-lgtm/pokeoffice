@@ -201,13 +201,16 @@ async def crear_planilla_tenant(tid: str):
 
 # ── Diagnóstico del sistema ───────────────────────────────────────────────────
 
-@router.get("/diagnostico", dependencies=[Depends(_require_admin)])
-async def get_diagnostico():
+@router.get("/diagnostico")
+async def get_diagnostico(pw: str = ""):
     """
     Endpoint de diagnóstico para debugging en producción.
     Muestra estado real de DB, Sheets y memoria por tenant.
     """
-    import os
+    expected = os.getenv("ADMIN_PASSWORD", "")
+    if not expected or pw != expected:
+        raise HTTPException(status_code=401, detail="Password incorrecta")
+
     from db.models import DB_PATH
     import aiosqlite
 
