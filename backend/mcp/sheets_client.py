@@ -753,6 +753,61 @@ def buscar_producto(query: str) -> list[dict]:
     return [p for p in productos if matches(p)]
 
 
+def registrar_salida_stock(query: str, cantidad: int) -> str:
+    """
+    Registra la salida de stock por venta. Reduce unidades del producto encontrado (fuzzy).
+    No puede dejar stock negativo. Devuelve el precio de venta para que el VP
+    lo use al registrar el ingreso en el Contador.
+    """
+    sid = get_spreadsheet_id()
+    svc = _sheets()
+    result = svc.spreadsheets().values().get(
+        spreadsheetId=sid, range="Stock!A2:J"
+    ).execute()
+    rows = result.get("values", [])
+    words = [w for w in query.lower().split() if len(w) > 2]
+    if not words:
+        return f"Query demasiado corta para buscar '{query}'."
+
+    for i, row in enumerate(rows):
+        text = " ".join([
+            str(row[0]) if row else "",
+            str(row[4]) if len(row) > 4 else "",
+        ]).lower()
+        if any(w in text for w in words):
+            row_num = i + 2
+            try:
+                actuales = int(str(row[1]).strip() or "0")
+            except ValueError:
+                actuales = 0
+            nuevas = max(0, actuales - cantidad)
+            try:
+                precio = float(str(row[2]).strip().replace(",", ".") or "0")
+            except ValueError:
+                precio = 0.0
+            fecha = datetime.now().strftime("%d/%m/%Y")
+            svc.spreadsheets().values().update(
+                spreadsheetId=sid,
+                range=f"Stock!B{row_num}:F{row_num}",
+                valueInputOption="USER_ENTERED",
+                body={"values": [[
+                    nuevas,
+                    row[2] if len(row) > 2 else "",
+                    row[3] if len(row) > 3 else "",
+                    row[4] if len(row) > 4 else "",
+                    fecha,
+                ]]},
+            ).execute()
+            nombre = row[4] if len(row) > 4 else row[0]
+            precio_str = f"${precio:,.0f}" if precio else "precio no registrado en stock"
+            return (
+                f"✓ Stock bajado por venta: '{nombre}' — "
+                f"{actuales} → {nuevas} unidades (-{cantidad} vendidas). "
+                f"Precio de venta unitario: {precio_str}."
+            )
+    return f"No se encontró '{query}' en el stock."
+
+
 def set_unidades_stock(query: str, cantidad: int) -> str:
     """
     Establece una cantidad EXACTA de unidades para un producto existente.

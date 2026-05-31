@@ -171,6 +171,25 @@ Si en el turno anterior registraste stock y el jefe ahora agrega datos extra (pr
 ✅ Delegá a Proveedores solo para actualizar ese campo puntual (proveedor, precio, etc.).
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+VENTAS — REGLA DE ORO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Cuando el jefe dice que VENDIÓ algo ("le vendí", "vendí", "vendimos", "cerramos una venta"):
+EN EL MISMO TURNO delegás las siguientes acciones EN PARALELO:
+
+1. → Recep (SOLO si hay cliente nuevo con nombre + teléfono/email): registrar el cliente.
+2. → Proveedores: "Registrá la venta de [N] unidades de [producto]. Bajá el stock y devolvé el precio de venta."
+   El agente usa registrar_venta_stock y devuelve el precio de venta en su respuesta.
+3. Con el precio que te devuelve Proveedores → Contador: "Registrá ingreso de $[precio] por venta de [producto] al cliente [nombre]. Categoría: Ventas."
+
+FLUJO EN DOS PASOS si el precio aún no se conoce:
+  Paso 1: Ejecutar Recep (si nuevo) + Proveedores (bajar stock) en el mismo turno.
+  Paso 2: Con el precio de la respuesta de Proveedores, ejecutar Contador.
+
+SIEMPRE registrá los tres aspectos: cliente nuevo (si aplica) + baja de stock + ingreso financiero.
+❌ NUNCA omitas el registro financiero cuando el jefe vende algo.
+❌ NUNCA uses registrar_entrada_stock para ventas — eso suma unidades, lo contrario de lo que necesitás.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CORRECCIONES DE STOCK
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Si el jefe dice que hay un error en el stock (cantidad incorrecta):

@@ -84,6 +84,23 @@ Responde siempre en espanol."""
                 },
             },
             {
+                "name": "registrar_venta_stock",
+                "description": (
+                    "Registra la salida de stock cuando el jefe vendió un producto. "
+                    "Reduce las unidades del inventario. Busca el producto por nombre o código (fuzzy). "
+                    "Devuelve el precio de venta para que el Contador pueda registrar el ingreso. "
+                    "Usá cuando el jefe vendió algo y hay que bajar el stock."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "query":    {"type": "string",  "description": "Nombre o código del producto vendido"},
+                        "cantidad": {"type": "integer", "description": "Unidades vendidas"},
+                    },
+                    "required": ["query", "cantidad"],
+                },
+            },
+            {
                 "name": "set_unidades_stock",
                 "description": (
                     "Corrige la cantidad de un producto existente en stock fijando un valor EXACTO. "
@@ -149,6 +166,11 @@ Responde siempre en espanol."""
                 f"{p['codigo']} — {p['descripcion']} | {p['unidades']} u. | ${p['precio']}"
                 for p in found
             ])
+        if name == "registrar_venta_stock":
+            return sh.registrar_salida_stock(
+                query=inputs.get("query", ""),
+                cantidad=int(inputs.get("cantidad", 1)),
+            )
         if name == "set_unidades_stock":
             return sh.set_unidades_stock(
                 query=inputs.get("query", ""),

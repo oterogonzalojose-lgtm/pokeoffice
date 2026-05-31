@@ -137,22 +137,23 @@ Respondé siempre en español, de forma directa y sin rodeos."""
         if m:
             datos["email"] = m.group()
 
-        # Teléfono (secuencias de 8+ dígitos)
-        m = re.search(r"\b(\+?[\d\s\-]{8,15})\b", task)
+        # Teléfono (solo dígitos, sin espacios para evitar capturar texto adyacente)
+        m = re.search(r"\b(\+?[\d]{8,15})\b", task)
         if m:
             datos["telefono"] = m.group().strip()
 
-        # Nombre — busca después de "cliente" (con prefijos opcionales como "al", "nuevo", "de")
-        # El prefijo es NO capturante para evitar capturar "cliente" como nombre.
+        # Nombre — PRIORIDAD 1: etiqueta explícita "Nombre:" (formato del VP estructurado)
+        # El VP envía: "- Nombre: Fernando Barrios - Teléfono: ..."
         m = re.search(
-            r"(?:(?:al|nuevo|del?|para)\s+)?cliente:?\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)*)",
-            task, re.IGNORECASE
+            r"[Nn]ombre:\s*([A-Za-záéíóúñÁÉÍÓÚÑ]+(?:\s+[A-Za-záéíóúñÁÉÍÓÚÑ]+)*)",
+            task
         )
         if not m:
-            # Fallback: busca después de "nombre:"
+            # PRIORIDAD 2: nombre propio después de "cliente" — SIN IGNORECASE para que
+            # [A-ZÁÉÍÓÚÑ] solo matchee mayúsculas y no capture "con", "los", "de", etc.
             m = re.search(
-                r"nombre[:\s]+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)*)",
-                task, re.IGNORECASE
+                r"(?:(?:al|nuevo|del?|para)\s+)?cliente:?\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)*)",
+                task
             )
         if m:
             partes = m.group(1).strip().split()
