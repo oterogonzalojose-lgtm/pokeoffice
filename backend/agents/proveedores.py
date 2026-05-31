@@ -9,11 +9,24 @@ class ProveedoresAgent(BaseAgent):
     def system_prompt(self) -> str:
         return """Sos el gestor de proveedores y del inventario de un pequeño negocio. Manejás compras, stock y precios.
 
-REGLAS CRÍTICAS:
-1. Si la instrucción tiene producto + precio, ejecutá directamente. No preguntes si ya existe — buscá primero y actualizá.
-2. Para actualizar precio: usá `actualizar_precio_stock` con el nombre del producto tal como fue mencionado.
-3. Para una orden de compra necesitás MÍNIMO: proveedor, producto, cantidad.
-4. Confirmá siempre qué quedó registrado y qué quedó pendiente.
+REGLAS CRÍTICAS — LEER ANTES DE CADA ACCIÓN:
+
+1. ANTES de registrar cualquier entrada, SIEMPRE buscá el producto con `buscar_producto`.
+   - Si existe → usá `registrar_entrada_stock` solo si hay nueva mercadería física que llegó.
+   - Si solo hay que actualizar proveedor/precio/datos: usá `actualizar_precio_stock` o `actualizar_proveedor_stock`.
+   - Si solo hay que corregir una cantidad errónea: usá `set_unidades_stock`.
+
+2. `registrar_entrada_stock` SUMA unidades. Solo usarlo cuando físicamente llegó mercadería nueva.
+   ❌ NUNCA lo uses para actualizar proveedor, precio o corregir errores de carga.
+
+3. `set_unidades_stock` REEMPLAZA la cantidad. Usalo para correcciones ("había 8, tiene que ser 4").
+
+4. Si `buscar_producto` devuelve error o lista vacía y el contexto indica que el producto YA fue cargado en este turno: NO lo cargues de nuevo. Reportá el error al VP.
+
+5. Para orden de compra necesitás MÍNIMO: proveedor, producto, cantidad.
+6. Confirmá siempre qué quedó registrado y qué quedó pendiente.
+
+Respondé siempre en español."""
 
 FORMATO DE ORDEN DE COMPRA:
 ═══════════════════════════
@@ -77,6 +90,22 @@ Respondé siempre en español."""
                 },
             },
             {
+                "name": "set_unidades_stock",
+                "description": (
+                    "Corrige la cantidad de un producto existente en stock fijando un valor EXACTO. "
+                    "No suma — reemplaza. Usar SOLO para correcciones de inventario ('había 8, tiene que ser 4'). "
+                    "Busca el producto por nombre o código (búsqueda fuzzy)."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "query":    {"type": "string",  "description": "Nombre o código del producto a corregir"},
+                        "cantidad": {"type": "integer", "description": "Cantidad correcta a fijar"},
+                    },
+                    "required": ["query", "cantidad"],
+                },
+            },
+            {
                 "name": "actualizar_precio_stock",
                 "description": (
                     "Actualiza el precio de venta (y opcionalmente el costo) de un producto ya existente en el inventario. "
@@ -126,6 +155,11 @@ Respondé siempre en español."""
                 f"{p['codigo']} — {p['descripcion']} | {p['unidades']} u. | ${p['precio']}"
                 for p in found
             ])
+        if name == "set_unidades_stock":
+            return sh.set_unidades_stock(
+                query=inputs.get("query", ""),
+                cantidad=int(inputs.get("cantidad", 0)),
+            )
         if name == "actualizar_precio_stock":
             return sh.actualizar_precio_stock(
                 query=inputs.get("query", ""),

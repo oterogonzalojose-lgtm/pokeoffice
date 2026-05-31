@@ -721,11 +721,65 @@ def actualizar_precio_stock(query: str, precio_venta: float = 0.0,
 
 
 def buscar_producto(query: str) -> list[dict]:
+    """
+    Búsqueda fuzzy por palabras individuales.
+    'platitos de aluminio' encuentra 'Platito de aluminio' porque 'aluminio' matchea.
+    Ignora palabras de ≤2 caracteres (artículos, preposiciones).
+    """
     productos = listar_stock()
-    q = query.lower()
-    return [p for p in productos
-            if q in p.get("codigo", "").lower()
-            or q in p.get("descripcion", "").lower()]
+    words = [w for w in query.lower().split() if len(w) > 2]
+    if not words:
+        return []
+
+    def matches(p: dict) -> bool:
+        text = " ".join([
+            p.get("codigo", ""),
+            p.get("descripcion", ""),
+            p.get("proveedor", ""),
+        ]).lower()
+        # Coincide si CUALQUIER palabra del query aparece en el texto completo
+        return any(w in text for w in words)
+
+    return [p for p in productos if matches(p)]
+
+
+def set_unidades_stock(query: str, cantidad: int) -> str:
+    """
+    Establece una cantidad EXACTA de unidades para un producto existente.
+    No suma — reemplaza. Usar para correcciones de inventario.
+    Busca el producto por nombre/código (fuzzy).
+    """
+    sid = get_spreadsheet_id()
+    svc = _sheets()
+    result = svc.spreadsheets().values().get(
+        spreadsheetId=sid, range="Stock!A2:J"
+    ).execute()
+    rows = result.get("values", [])
+    words = [w for w in query.lower().split() if len(w) > 2]
+
+    for i, row in enumerate(rows):
+        text = " ".join([
+            str(row[0]) if row else "",
+            str(row[4]) if len(row) > 4 else "",
+        ]).lower()
+        if any(w in text for w in words):
+            row_num = i + 2
+            fecha = datetime.now().strftime("%d/%m/%Y")
+            svc.spreadsheets().values().update(
+                spreadsheetId=sid,
+                range=f"Stock!B{row_num}:F{row_num}",
+                valueInputOption="USER_ENTERED",
+                body={"values": [[
+                    cantidad,
+                    row[2] if len(row) > 2 else "",
+                    row[3] if len(row) > 3 else "",
+                    row[4] if len(row) > 4 else "",
+                    fecha,
+                ]]},
+            ).execute()
+            nombre = row[4] if len(row) > 4 else row[0]
+            return f"✓ Stock corregido: '{nombre}' — cantidad fijada en {cantidad} unidades."
+    return f"No se encontró '{query}' en el stock para corregir."
 
 
 # ── Actualizar fórmulas planilla existente ────────────────────────────────────
