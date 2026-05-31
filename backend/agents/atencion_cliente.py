@@ -119,6 +119,46 @@ Respondé siempre en español, de forma directa y sin rodeos."""
             except Exception as e:
                 contexto = f"Error al leer clientes: {e}"
 
+        # ── Actualizar campo de cliente existente ─────────────────────────────
+        elif any(w in task_lower for w in ["actualiz", "modific", "cambi", "poné", "pone", "anotá", "anota"]):
+            await self._emit(broadcast, "working", "Actualizando datos del cliente...")
+
+            # Extraer nombre del cliente: "de/para/actualizar NOMBRE"
+            m_nombre = re.search(
+                r"(?:de|para|actualizar|actualiz[aá]r?)\s+([A-Za-záéíóúñÁÉÍÓÚÑ]+(?:\s+[A-Za-záéíóúñÁÉÍÓÚÑ]+)+)",
+                task, re.IGNORECASE
+            )
+            nombre_cliente = m_nombre.group(1).strip() if m_nombre else ""
+
+            # Extraer pares campo = valor (formato: "campo NOMBRE = VALOR")
+            partes_campo = re.split(r"\bcampo\b", task, flags=re.IGNORECASE)
+            pares = []
+            for parte in partes_campo[1:]:
+                m = re.match(r"\s*([^=]+?)\s*=\s*(.+?)(?:\s*,\s*$|\s*$)", parte.strip(), re.DOTALL)
+                if m:
+                    campo = m.group(1).strip().strip("'\"")
+                    valor = m.group(2).strip().strip("'\"").rstrip(",").strip()
+                    if campo and valor:
+                        pares.append((campo, valor))
+
+            if not nombre_cliente:
+                contexto = "No pude identificar el cliente a actualizar. Indicá el nombre completo."
+            elif not pares:
+                contexto = (
+                    "No pude identificar qué campo actualizar. "
+                    "Usá el formato: 'campo [Nombre del campo] = [Valor]'"
+                )
+            else:
+                resultados = []
+                for campo, valor in pares:
+                    await self._emit(broadcast, "working", f"Actualizando '{campo}'...")
+                    try:
+                        r = sh.actualizar_campo_cliente(nombre_cliente, campo, valor)
+                        resultados.append(r)
+                    except Exception as e:
+                        resultados.append(f"Error al actualizar '{campo}': {e}")
+                contexto = "\n".join(resultados)
+
         # ── Tarea de comunicación (redactar mensajes) ─────────────────────────
         else:
             await self._emit(broadcast, "thinking", "Preparando respuesta...")

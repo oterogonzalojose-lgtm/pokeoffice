@@ -762,6 +762,52 @@ def _num_to_col_letter(n: int) -> str:
     return result
 
 
+def actualizar_campo_cliente(nombre_cliente: str, campo: str, valor: str) -> str:
+    """
+    Actualiza un campo específico de un cliente existente.
+    Busca el cliente por nombre (fuzzy) y la columna por su header (case-insensitive).
+    Funciona con columnas default y columnas personalizadas.
+    """
+    sid = get_spreadsheet_id()
+    svc = _sheets()
+
+    result = svc.spreadsheets().values().get(
+        spreadsheetId=sid, range="Clientes!A1:ZZ"
+    ).execute()
+    rows = result.get("values", [])
+    if not rows:
+        return "No hay datos en la hoja Clientes."
+
+    headers = rows[0]
+
+    # Encontrar la columna por nombre (case-insensitive)
+    col_idx = next((i for i, h in enumerate(headers) if h.lower() == campo.lower()), None)
+    if col_idx is None:
+        return (
+            f"No se encontró la columna '{campo}' en Clientes. "
+            f"Columnas disponibles: {', '.join(headers)}."
+        )
+
+    # Buscar cliente por nombre (fuzzy: cualquier parte del nombre completo)
+    q = nombre_cliente.lower().strip()
+    for i, row in enumerate(rows[1:], start=2):
+        nombre  = str(row[1] if len(row) > 1 else "").lower()
+        apellido = str(row[2] if len(row) > 2 else "").lower()
+        full    = f"{nombre} {apellido}".strip()
+        if q in nombre or q in apellido or q in full:
+            col_letter = _num_to_col_letter(col_idx + 1)
+            svc.spreadsheets().values().update(
+                spreadsheetId=sid,
+                range=f"Clientes!{col_letter}{i}",
+                valueInputOption="USER_ENTERED",
+                body={"values": [[valor]]},
+            ).execute()
+            nombre_completo = f"{row[1] if len(row) > 1 else ''} {row[2] if len(row) > 2 else ''}".strip()
+            return f"✓ '{campo}' de {nombre_completo} actualizado a '{valor}'."
+
+    return f"No se encontró ningún cliente con el nombre '{nombre_cliente}'."
+
+
 def agregar_columna_personalizada(hoja: str, nombre_columna: str) -> str:
     """
     Agrega una columna al final de la hoja indicada (Clientes o Stock).

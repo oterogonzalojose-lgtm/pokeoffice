@@ -224,6 +224,19 @@ Una vez que un agente devuelve un mensaje con "✓" o "Registrado" o "registrado
 Si el Contador dice "⚠ Movimiento duplicado detectado", eso significa que YA estaba registrado. Informalo al jefe sin registrar de nuevo.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ACTUALIZACIÓN DE DATOS DE CLIENTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Cuando el jefe da información adicional sobre un cliente existente (nombre de mascota, notas, etc.):
+Delegá a Recep SIEMPRE con este formato exacto:
+"Actualizar [NOMBRE APELLIDO]: campo [Nombre del campo] = [valor], campo [Nombre del campo 2] = [valor2]"
+
+Ejemplos válidos:
+• "Actualizar Daniela Spinelli: campo Nombre del perro = Aron, campo Raza del perro = Border Collie"
+• "Actualizar Fernando Barrios: campo Nombre del perro = Canela"
+
+❌ NO uses lenguaje ambiguo como "anotá que..." — el Recep necesita el formato campo = valor.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 BRIEFING DE CLIENTES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Cuando el jefe mencione el nombre de un cliente — "hoy viene Daniela", "qué tiene pendiente María" — PRIMERO usá `briefing_cliente`.
