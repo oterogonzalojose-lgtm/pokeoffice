@@ -13,6 +13,7 @@ import os
 
 from anthropic import Anthropic
 from db.models import guardar_aprendizaje, obtener_memoria
+from .utils import call_with_retry
 
 log = logging.getLogger("pokeoffice.memoria")
 
@@ -58,8 +59,9 @@ async def extraer_aprendizajes(user_message: str, vp_response: str,
     )
 
     try:
-        resp = _client.messages.create(
-            model="claude-haiku-4-5-20251001",   # modelo rápido y barato para esta tarea
+        resp = await call_with_retry(
+            _client.messages.create,
+            model="claude-haiku-4-5-20251001",
             max_tokens=256,
             system=_EXTRACTION_PROMPT,
             messages=[{"role": "user", "content": prompt}],
@@ -70,7 +72,7 @@ async def extraer_aprendizajes(user_message: str, vp_response: str,
             return []
         return aprendizajes
     except Exception as e:
-        log.debug("extraer_aprendizajes: %s", e)
+        log.error("extraer_aprendizajes: %s", e)
         return []
 
 

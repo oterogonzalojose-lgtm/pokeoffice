@@ -228,7 +228,7 @@ async def obtener_memoria(limit: int = 30, tenant_id: str = "") -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT tipo, aprendizaje, usos FROM vp_memoria "
+            "SELECT tipo, aprendizaje, contexto, relevancia, usos, user_email FROM vp_memoria "
             "WHERE tenant_id = ? "
             "ORDER BY relevancia DESC, usos DESC, created_at DESC LIMIT ?",
             (tenant_id, limit),

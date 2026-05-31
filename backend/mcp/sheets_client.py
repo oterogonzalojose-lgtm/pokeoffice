@@ -10,6 +10,7 @@ Estructura de la planilla:
 import os
 import json
 import logging
+import contextvars
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -26,6 +27,17 @@ SCOPES = [
 
 _DATA_DIR    = Path(os.getenv("DATA_DIR", str(Path(__file__).parent.parent)))
 _CONFIG_PATH = _DATA_DIR / "pokeoffice.config.json"
+
+# ContextVar para pasar el spreadsheet_id del tenant activo a través del call stack
+# Se setea en run_vp() al inicio de cada request, antes de delegar a agentes.
+_tenant_sid_ctx: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "tenant_spreadsheet_id", default=""
+)
+
+
+def set_tenant_spreadsheet_id_ctx(sid: str):
+    """Llamar al inicio de cada request con el spreadsheet_id del tenant."""
+    _tenant_sid_ctx.set(sid)
 
 
 # ── Credentials & config ──────────────────────────────────────────────────────
@@ -62,11 +74,16 @@ def save_config(data: dict):
 
 
 def get_spreadsheet_id() -> str:
+    # 1. ContextVar seteado por run_vp() al inicio del request (prioridad máxima)
+    ctx = _tenant_sid_ctx.get()
+    if ctx:
+        return ctx
+    # 2. Config file local o variable de entorno (fallback / legacy single-tenant)
     sid = load_config().get("spreadsheet_id") or os.getenv("SPREADSHEET_ID", "")
     if not sid:
         raise RuntimeError(
-            "Planilla maestra no configurada. "
-            "Ejecutá: python scripts/crear_planilla.py --nombre 'Mi Negocio'"
+            "Planilla maestra no configurada para este tenant. "
+            "Vinculá una Google Sheet desde el panel de configuración."
         )
     return sid
 

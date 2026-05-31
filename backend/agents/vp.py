@@ -14,6 +14,7 @@ from .programador import ProgramadorAgent
 from .memoria_vp import procesar_post_conversacion, construir_contexto_memoria
 from db.models import obtener_memoria, get_all_config
 from mcp import sheets_client as sh
+from mcp.sheets_client import set_tenant_spreadsheet_id_ctx
 
 log = logging.getLogger("pokeoffice")
 
@@ -219,6 +220,18 @@ async def run_vp(user_message: str, broadcast: Broadcaster = None,
                  tenant_id: str = "", user_email: str = "") -> str:
     history_key = (tenant_id, user_email)
     history = _HISTORY.setdefault(history_key, [])
+
+    # Setear el spreadsheet_id del tenant en el ContextVar para que todos los
+    # agentes usen la planilla correcta sin necesidad de pasar el ID explícitamente.
+    if tenant_id:
+        try:
+            from db.admin_models import get_tenant
+            tenant_data = await get_tenant(tenant_id)
+            sid = (tenant_data or {}).get("spreadsheet_id", "")
+            if sid:
+                set_tenant_spreadsheet_id_ctx(sid)
+        except Exception as _e:
+            log.warning("run_vp: no pudo cargar spreadsheet_id del tenant %s: %s", tenant_id, _e)
 
     # Enriquecer el mensaje si es una confirmación para que el VP tenga contexto claro
     mensaje_enriquecido = user_message

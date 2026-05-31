@@ -12,6 +12,7 @@ import logging
 import os
 
 from anthropic import Anthropic
+from .utils import call_with_retry
 
 log = logging.getLogger("pokeoffice.master_dev")
 
@@ -60,7 +61,8 @@ async def analizar_conversacion(user_message: str, vp_response: str, tenant_id: 
             f"RESPUESTA DEL VP (contiene mención a dificultad técnica):\n{vp_response[:600]}"
         )
 
-        resp = _client.messages.create(
+        resp = await call_with_retry(
+            _client.messages.create,
             model="claude-haiku-4-5-20251001",
             max_tokens=512,
             system=_SYSTEM,
