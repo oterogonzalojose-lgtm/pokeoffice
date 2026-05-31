@@ -77,6 +77,23 @@ _TOOLS = [
         },
     },
     {
+        "name": "agregar_columna_personalizada",
+        "description": (
+            "Agrega una columna personalizada al final de la hoja Clientes o Stock de la planilla. "
+            "La hoja Finanzas NO se puede modificar. "
+            "Si el jefe pide agregar varias columnas, llamá esta tool una vez por cada columna."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "hoja":           {"type": "string", "enum": ["Clientes", "Stock"],
+                                   "description": "Hoja donde agregar la columna"},
+                "nombre_columna": {"type": "string", "description": "Nombre de la nueva columna"},
+            },
+            "required": ["hoja", "nombre_columna"],
+        },
+    },
+    {
         "name": "delegar_programador",
         "description": "Escala un problema técnico al Programador. Usá cuando: un agente reporta un error de sistema, falla de conexión, resultado inesperado, o cualquier problema técnico. NO reportes errores al jefe sin consultar primero al programador.",
         "input_schema": {
@@ -363,8 +380,23 @@ async def run_vp(user_message: str, broadcast: Broadcaster = None,
                         "to": agent_id, "message": truncate(task, 100),
                     })
 
-                # ── Tool directa del VP: briefing_cliente ─────────────────────
-                if block.name == "briefing_cliente":
+                # ── Tools directas del VP ────────────────────────────────────
+                if block.name == "agregar_columna_personalizada":
+                    hoja           = block.input.get("hoja", "")
+                    nombre_columna = block.input.get("nombre_columna", "")
+                    if broadcast:
+                        await broadcast({
+                            "type": "agent_state", "agent": "vp",
+                            "state": "working",
+                            "message": f"Agregando columna '{nombre_columna}' en {hoja}...",
+                        })
+                    try:
+                        agent_result = sh.agregar_columna_personalizada(hoja, nombre_columna)
+                    except Exception as e:
+                        agent_result = f"Error al agregar columna: {e}"
+                        log.error("agregar_columna_personalizada: %s", e, exc_info=True)
+
+                elif block.name == "briefing_cliente":
                     nombre = block.input.get("nombre", "")
                     if broadcast:
                         await broadcast({

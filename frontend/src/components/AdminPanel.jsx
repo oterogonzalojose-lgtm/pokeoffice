@@ -381,6 +381,9 @@ export default function AdminPanel({ token, onLogout }) {
   const [platformEvents, setPlatformEvents] = useState([])
   const [evFilter, setEvFilter] = useState({ tipo: '', estado: 'pendiente' })
   const [respuestaForm, setRespuestaForm] = useState({})   // { [eid]: string }
+  const [fixes, setFixes] = useState([])
+  const [fixResult, setFixResult] = useState(null)
+  const [runningFix, setRunningFix] = useState('')
   const loadPlatformEvents = useCallback(async (filter = evFilter) => {
     const params = new URLSearchParams()
     if (filter.tipo)   params.set('tipo',   filter.tipo)
@@ -392,6 +395,14 @@ export default function AdminPanel({ token, onLogout }) {
   async function cambiarEstadoEvent(eid, estado) {
     await adminFetch(`/api/admin/platform-events/${eid}/estado?estado=${estado}`, { method: 'PATCH' })
     loadPlatformEvents()
+  }
+
+  async function executeFix(fixId) {
+    setRunningFix(fixId)
+    setFixResult(null)
+    const result = await adminFetch(`/api/admin/fixes/${fixId}`, { method: 'POST' })
+    setFixResult(result)
+    setRunningFix('')
   }
 
   async function responderEvent(eid, nuevo_estado) {
@@ -413,7 +424,12 @@ export default function AdminPanel({ token, onLogout }) {
   }, [loadTenants])
   useEffect(() => { if (tab === 'feedback')    loadFeedback() },           [tab, loadFeedback])
   useEffect(() => { if (tab === 'solicitudes') loadSolicitudes() },         [tab, loadSolicitudes])
-  useEffect(() => { if (tab === 'plataforma')  loadPlatformEvents(evFilter) }, [tab])  // eslint-disable-line
+  useEffect(() => {
+    if (tab === 'plataforma') {
+      loadPlatformEvents(evFilter)
+      adminFetch('/api/admin/fixes').then(data => { if (data) setFixes(Array.isArray(data) ? data : []) })
+    }
+  }, [tab])  // eslint-disable-line
   useEffect(() => { if (tab === 'logs')        loadLogs(logFilter) },      [tab])  // eslint-disable-line
 
   async function handleCreateTenant(e) {
@@ -567,6 +583,46 @@ export default function AdminPanel({ token, onLogout }) {
         {/* Plataforma tab */}
         {tab === 'plataforma' && (
           <div className="flex flex-col gap-4">
+
+            {/* Fixes ejecutables para todos los tenants */}
+            {fixes.length > 0 && (
+              <div className="bg-[#07070f] border border-[#2a2a4a] rounded p-4 flex flex-col gap-3">
+                <h3 className="font-mono text-xs font-bold text-purple-400 uppercase tracking-widest">
+                  Ejecutar fix para todos los tenants
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {fixes.map(f => (
+                    <button key={f.id}
+                      onClick={() => executeFix(f.id)}
+                      disabled={!!runningFix}
+                      title={f.descripcion}
+                      className="font-mono text-xs px-3 py-1.5 bg-[#1a1a2e] border border-[#2a2a4a] rounded text-gray-300 hover:text-white hover:border-purple-800 disabled:opacity-40 transition-colors">
+                      {runningFix === f.id ? '⏳ Corriendo...' : f.nombre}
+                    </button>
+                  ))}
+                </div>
+
+                {fixResult && (
+                  <div className="flex flex-col gap-1 mt-1">
+                    <p className="font-mono text-[10px] text-gray-500">
+                      {fixResult.nombre} — {fixResult.tenants_procesados} tenants procesados
+                    </p>
+                    {(fixResult.resultados || []).map((r, i) => (
+                      <div key={i} className={`font-mono text-[10px] px-2 py-1 rounded flex gap-2 ${
+                        r.status === 'ok' ? 'bg-[#0a1a0a] text-green-400' : 'bg-[#1a0a0a] text-red-400'
+                      }`}>
+                        <span className="font-bold shrink-0">{r.tenant}:</span>
+                        <span>{r.resultado || r.error}</span>
+                      </div>
+                    ))}
+                    {fixResult.error && (
+                      <p className="font-mono text-[10px] text-red-400">{fixResult.error}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="font-mono text-sm font-bold text-white uppercase tracking-widest">
                 Master DEV — Eventos de plataforma

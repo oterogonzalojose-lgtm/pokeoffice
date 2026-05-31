@@ -196,6 +196,23 @@ async def patch_responder_event(eid: int, req: RespuestaEventRequest):
     return {"ok": True}
 
 
+# ── Admin Fixes (ejecutables para todos los tenants) ─────────────────────────
+
+@router.get("/fixes", dependencies=[Depends(_require_admin)])
+async def get_fixes():
+    from admin_fixes import FIXES
+    return [
+        {"id": fid, "nombre": f["nombre"], "descripcion": f["descripcion"]}
+        for fid, f in FIXES.items()
+    ]
+
+
+@router.post("/fixes/{fix_id}", dependencies=[Depends(_require_admin)])
+async def post_run_fix(fix_id: str):
+    from admin_fixes import run_fix
+    return await run_fix(fix_id)
+
+
 # ── Crear planilla maestra desde admin ───────────────────────────────────────
 
 @router.post("/tenants/{tid}/crear-planilla", dependencies=[Depends(_require_admin)])

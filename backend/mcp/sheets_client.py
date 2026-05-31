@@ -753,6 +753,48 @@ def buscar_producto(query: str) -> list[dict]:
     return [p for p in productos if matches(p)]
 
 
+def _num_to_col_letter(n: int) -> str:
+    """Convierte número de columna 1-indexed a letra(s): 1→A, 26→Z, 27→AA."""
+    result = ""
+    while n > 0:
+        n, rem = divmod(n - 1, 26)
+        result = chr(65 + rem) + result
+    return result
+
+
+def agregar_columna_personalizada(hoja: str, nombre_columna: str) -> str:
+    """
+    Agrega una columna al final de la hoja indicada (Clientes o Stock).
+    La hoja Finanzas está protegida — no se puede modificar desde aquí.
+    """
+    HOJAS_PERMITIDAS = {"Clientes", "Stock"}
+    if hoja not in HOJAS_PERMITIDAS:
+        return (
+            f"La hoja '{hoja}' no permite columnas personalizadas. "
+            f"Solo se puede modificar: {', '.join(sorted(HOJAS_PERMITIDAS))}. "
+            f"La hoja Finanzas solo puede ser modificada por el equipo de Pokeoffice."
+        )
+
+    sid = get_spreadsheet_id()
+    svc = _sheets()
+    result = svc.spreadsheets().values().get(
+        spreadsheetId=sid, range=f"{hoja}!1:1"
+    ).execute()
+    headers = result.get("values", [[]])[0] if result.get("values") else []
+
+    if any(nombre_columna.lower() == h.lower() for h in headers):
+        return f"La columna '{nombre_columna}' ya existe en la hoja {hoja}."
+
+    col_letter = _num_to_col_letter(len(headers) + 1)
+    svc.spreadsheets().values().update(
+        spreadsheetId=sid,
+        range=f"{hoja}!{col_letter}1",
+        valueInputOption="USER_ENTERED",
+        body={"values": [[nombre_columna]]},
+    ).execute()
+    return f"✓ Columna '{nombre_columna}' agregada en {hoja} (columna {col_letter})."
+
+
 def registrar_salida_stock(query: str, cantidad: int) -> str:
     """
     Registra la salida de stock por venta. Reduce unidades del producto encontrado (fuzzy).
