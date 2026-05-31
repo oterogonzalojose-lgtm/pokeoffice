@@ -23,11 +23,14 @@ import json
 import os
 import sys
 import time
+from pathlib import Path
 from typing import Optional
 import httpx
 
-sys.path.insert(0, str(__file__).rsplit("/scenarios", 1)[0])
-from scenarios.business_data import TODOS_LOS_NEGOCIOS
+_HERE = Path(__file__).parent
+sys.path.insert(0, str(_HERE.parent))
+sys.path.insert(0, str(_HERE))
+from business_data import TODOS_LOS_NEGOCIOS
 
 API_URL    = os.getenv("POKEOFFICE_URL", "https://pokeoffice-production.up.railway.app")
 TIMEOUT    = 120.0

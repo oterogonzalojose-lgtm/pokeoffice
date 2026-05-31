@@ -26,12 +26,15 @@ import asyncio
 import os
 import json
 import sys
+from pathlib import Path
 from typing import Optional
 import httpx
 
-# Importar datos de negocios
-sys.path.insert(0, str(__file__).rsplit("/scenarios", 1)[0])
-from scenarios.business_data import TODOS_LOS_NEGOCIOS
+# Importar datos de negocios (funciona desde cualquier directorio)
+_HERE = Path(__file__).parent
+sys.path.insert(0, str(_HERE.parent))   # agrega tests/ al path
+sys.path.insert(0, str(_HERE))          # agrega tests/scenarios/ al path
+from business_data import TODOS_LOS_NEGOCIOS
 
 API_URL      = os.getenv("POKEOFFICE_URL", "https://pokeoffice-production.up.railway.app")
 ADMIN_PASS   = os.getenv("ADMIN_PASSWORD", "")
@@ -111,11 +114,10 @@ async def registrar_usuario(client: httpx.AsyncClient, tenant_info: dict) -> Opt
     email  = perfil["email_admin"]
     codigo = tenant_info["codigo"]
 
-    # Verificar código
-    r = await client.post("/api/auth/verify", json={
+    # Verificar código (endpoint público — no requiere JWT)
+    r = await client.post("/auth/verificar", json={
         "email": email,
         "codigo": codigo,
-        "nombre": perfil["nombre_jefe"],
     })
     if r.status_code >= 400:
         print(f"  ✗ Error verificando código: {r.text[:200]}")
