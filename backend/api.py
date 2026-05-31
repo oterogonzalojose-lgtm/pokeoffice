@@ -38,23 +38,27 @@ from mcp.sheets_client import (
 
 class ConnectionManager:
     def __init__(self):
-        self.active: list[WebSocket] = []
+        # tenant_id → lista de WebSockets activos para ese tenant
+        self.active: dict[str, list[WebSocket]] = {}
 
-    async def connect(self, ws: WebSocket):
+    async def connect(self, ws: WebSocket, tenant_id: str):
         await ws.accept()
-        self.active.append(ws)
+        self.active.setdefault(tenant_id, []).append(ws)
 
-    def disconnect(self, ws: WebSocket):
-        if ws in self.active:
-            self.active.remove(ws)
+    def disconnect(self, ws: WebSocket, tenant_id: str):
+        if tenant_id in self.active:
+            self.active[tenant_id] = [w for w in self.active[tenant_id] if w is not ws]
 
-    async def broadcast(self, data: dict):
+    async def broadcast(self, data: dict, tenant_id: str = ""):
+        """Emite solo a los clientes del tenant indicado."""
+        if not tenant_id:
+            return
         payload = json.dumps(data, ensure_ascii=False)
-        for ws in list(self.active):
+        for ws in list(self.active.get(tenant_id, [])):
             try:
                 await ws.send_text(payload)
             except Exception:
-                self.disconnect(ws)
+                self.disconnect(ws, tenant_id)
 
 
 manager = ConnectionManager()
@@ -75,7 +79,7 @@ async def job_briefing_diario():
                 continue
             rec = await crear_recordatorio(texto, tipo="recordatorio",
                                            origen="scheduler", tenant_id=t["id"])
-            await manager.broadcast({"type": "recordatorio_nuevo", "recordatorio": rec})
+            await manager.broadcast({"type": "recordatorio_nuevo", "recordatorio": rec}, tenant_id=t["id"])
     except Exception as e:
         log.error("job_briefing_diario: %s", e)
 
@@ -171,13 +175,21 @@ app.add_middleware(
 # ── WebSocket ─────────────────────────────────────────────────────────────────
 
 @app.websocket("/ws")
-async def websocket_endpoint(ws: WebSocket):
-    await manager.connect(ws)
+async def websocket_endpoint(ws: WebSocket, token: str = ""):
+    tenant_id = ""
+    if token:
+        try:
+            payload = _jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            if payload.get("role") == "user":
+                tenant_id = payload.get("tenant_id", "")
+        except Exception:
+            pass
+    await manager.connect(ws, tenant_id)
     try:
         while True:
             await ws.receive_text()
     except WebSocketDisconnect:
-        manager.disconnect(ws)
+        manager.disconnect(ws, tenant_id)
 
 
 # ── Mensajes al VP ────────────────────────────────────────────────────────────
@@ -195,7 +207,7 @@ async def send_message(req: MessageRequest, request: Request):
 
     async def capture_and_broadcast(event: dict):
         events.append(event)
-        await manager.broadcast(event)
+        await manager.broadcast(event, tenant_id=tenant_id)
 
     result = await run_vp(req.message, broadcast=capture_and_broadcast,
                           tenant_id=tenant_id, user_email=user_email)
@@ -325,7 +337,7 @@ class RecordatorioRequest(BaseModel):
 async def post_recordatorio(req: RecordatorioRequest, request: Request):
     tenant_id = getattr(request.state, "user", {}).get("tenant_id", "")
     rec = await crear_recordatorio(req.texto, req.tipo, req.origen, tenant_id=tenant_id)
-    await manager.broadcast({"type": "recordatorio_nuevo", "recordatorio": rec})
+    await manager.broadcast({"type": "recordatorio_nuevo", "recordatorio": rec}, tenant_id=tenant_id)
     return rec
 
 
