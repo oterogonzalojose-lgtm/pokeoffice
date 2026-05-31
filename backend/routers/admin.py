@@ -197,3 +197,93 @@ async def crear_planilla_tenant(tid: str):
                 "url": f"https://docs.google.com/spreadsheets/d/{sid}"}
     except Exception as e:
         raise HTTPException(500, f"Error al crear planilla: {e}")
+
+
+# ── Diagnóstico del sistema ───────────────────────────────────────────────────
+
+@router.get("/diagnostico", dependencies=[Depends(_require_admin)])
+async def get_diagnostico():
+    """
+    Endpoint de diagnóstico para debugging en producción.
+    Muestra estado real de DB, Sheets y memoria por tenant.
+    """
+    import os
+    from db.models import DB_PATH
+    import aiosqlite
+
+    resultado = {
+        "db_path": str(DB_PATH),
+        "db_exists": DB_PATH.exists(),
+        "env": {
+            "DATA_DIR": os.getenv("DATA_DIR", "no seteado"),
+            "ANTHROPIC_API_KEY": "ok" if os.getenv("ANTHROPIC_API_KEY") else "FALTA",
+            "GOOGLE_SERVICE_ACCOUNT_JSON": "ok" if os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON") else "FALTA",
+            "ADMIN_SECRET": os.getenv("ADMIN_SECRET", "")[:4] + "..." if os.getenv("ADMIN_SECRET") else "FALTA",
+        },
+        "tenants": [],
+        "platform_events_total": 0,
+        "bg_tasks_activos": 0,
+    }
+
+    # Estado de tasks en background
+    try:
+        from agents.vp import _bg_tasks
+        resultado["bg_tasks_activos"] = len(_bg_tasks)
+    except Exception:
+        pass
+
+    # Conteo de platform_events
+    try:
+        events = await listar_platform_events()
+        resultado["platform_events_total"] = len(events)
+        resultado["platform_events_recientes"] = events[:5]
+    except Exception as e:
+        resultado["platform_events_error"] = str(e)
+
+    # Info por tenant
+    try:
+        tenants = await listar_tenants()
+        for t in tenants:
+            tid = t["id"]
+            info: dict = {
+                "id": tid,
+                "email": t.get("email"),
+                "nombre_negocio": t.get("nombre_negocio"),
+                "activo": t.get("activo"),
+                "spreadsheet_id_db": t.get("spreadsheet_id"),
+                "memoria_count": t.get("memoria_count", 0),
+                "conv_count": t.get("conv_count", 0),
+                "sheets_ok": None,
+                "sheets_error": None,
+            }
+
+            # Probar conexión a sheets si tiene ID configurado
+            sid = t.get("spreadsheet_id") or ""
+            if sid:
+                try:
+                    from mcp.sheets_client import _sheets
+                    meta = _sheets().spreadsheets().get(spreadsheetId=sid).execute()
+                    info["sheets_ok"] = True
+                    info["sheets_titulo"] = meta.get("properties", {}).get("title", "")
+                except Exception as se:
+                    info["sheets_ok"] = False
+                    info["sheets_error"] = str(se)[:200]
+
+            # Últimas memorias
+            try:
+                async with aiosqlite.connect(DB_PATH) as db:
+                    db.row_factory = aiosqlite.Row
+                    cur = await db.execute(
+                        "SELECT tipo, aprendizaje, user_email, created_at "
+                        "FROM vp_memoria WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 3",
+                        (tid,),
+                    )
+                    info["ultimas_memorias"] = [dict(r) for r in await cur.fetchall()]
+            except Exception:
+                info["ultimas_memorias"] = []
+
+            resultado["tenants"].append(info)
+    except Exception as e:
+        resultado["tenants_error"] = str(e)
+
+    return resultado

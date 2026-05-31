@@ -30,7 +30,7 @@ async def call_with_retry(fn, *args, **kwargs):
     fn debe ser sincrónica (los clientes Anthropic no son async).
     Corre en un executor para no bloquear el event loop.
     """
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     last_exc = None
 
     for attempt in range(1, MAX_RETRIES + 1):

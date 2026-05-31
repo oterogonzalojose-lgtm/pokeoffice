@@ -186,6 +186,17 @@ FORMATO DE RESPUESTA
 _HISTORY: dict[tuple[str, str], list[dict]] = {}
 MAX_HISTORY = 40
 
+# Referencias fuertes a tasks de background para evitar GC prematuro.
+# Python solo guarda weak refs a tasks; sin esto pueden ser eliminadas antes de terminar.
+_bg_tasks: set = set()
+
+
+def _fire_and_track(coro) -> None:
+    """Crea un task con referencia fuerte. Se auto-descarta al completar."""
+    task = asyncio.create_task(coro)
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
+
 
 _CONFIRMACIONES = {"sí", "si", "dale", "ok", "confirmá", "confirma", "confirmo",
                    "sigue", "adelante", "hacelo", "anotalo", "registralo", "procedé",
@@ -227,9 +238,13 @@ async def run_vp(user_message: str, broadcast: Broadcaster = None,
         try:
             from db.admin_models import get_tenant
             tenant_data = await get_tenant(tenant_id)
-            sid = (tenant_data or {}).get("spreadsheet_id", "")
+            # Usar `or ""` en lugar de default="" porque SQLite NULL es Python None
+            sid = (tenant_data or {}).get("spreadsheet_id") or ""
             if sid:
                 set_tenant_spreadsheet_id_ctx(sid)
+                log.debug("run_vp: spreadsheet_id seteado para tenant %s", tenant_id)
+            else:
+                log.warning("run_vp: tenant %s no tiene spreadsheet_id en DB", tenant_id)
         except Exception as _e:
             log.warning("run_vp: no pudo cargar spreadsheet_id del tenant %s: %s", tenant_id, _e)
 
@@ -348,8 +363,8 @@ async def run_vp(user_message: str, broadcast: Broadcaster = None,
         await broadcast({"type": "vp_response", "message": result})
         await broadcast({"type": "agent_state", "agent": "vp", "state": "idle", "message": ""})
 
-    # Extraer aprendizajes en background (no bloquea la respuesta)
-    asyncio.create_task(procesar_post_conversacion(
+    # Extraer aprendizajes en background con referencia fuerte para evitar GC prematuro
+    _fire_and_track(procesar_post_conversacion(
         user_message, result, tenant_id=tenant_id, user_email=user_email
     ))
 

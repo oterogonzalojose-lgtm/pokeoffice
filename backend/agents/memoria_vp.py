@@ -109,7 +109,8 @@ async def procesar_post_conversacion(user_message: str, vp_response: str,
     if "dificultad técnica" in vp_response.lower():
         try:
             from .master_dev import analizar_conversacion
-            asyncio.create_task(analizar_conversacion(user_message, vp_response, tenant_id=tenant_id))
+            from .vp import _fire_and_track
+            _fire_and_track(analizar_conversacion(user_message, vp_response, tenant_id=tenant_id))
             log.info("master_dev: análisis disparado para tenant=%s", tenant_id)
         except Exception as e:
             log.error("procesar_post_conversacion (master_dev): %s", e)
